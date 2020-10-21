@@ -1,4 +1,3 @@
-
 import uproot4
 import sys
 import argparse
@@ -13,16 +12,12 @@ import MLConfig as cfg
 from os import path
 from sklearn.utils import shuffle
 
-print("\n########## BEGIN PYTHON SCRIPT ############")
-
-# parser = argparse.ArgumentParser()
-# parser.add_argument("-f", "--filename", required=True, type=str)
-# args = parser.parse_args()
-
 # region ######### Methods ######### 
-# args must be numpy arrays + have the same length!
-# but somehow this does not change the arrays outside the function although numpy arrays are mutable ??
 def shuffleNumpyArrays(*args):
+    """ 
+    args must be numpy arrays + have the same length! 
+    but somehow this does not change the arrays outside the function although numpy arrays are mutable (??)
+    """
     try:
         indices_ = np.arange(args[0].shape[0])
         np.random.shuffle(indices_)
@@ -30,9 +25,6 @@ def shuffleNumpyArrays(*args):
             arr = arr[indices_]
     except Exception as ex:
         print("shuffleNumpyArrays() - ", ex)
-
-def shuffleArrays(*args):
-    return shuffle(args, random_state = 0)
 
 def rootTTree2numpy(path_, rootFile):
     f = uproot4.open(path.join(path_, rootFile))
@@ -69,7 +61,10 @@ def buildDataset(path_, fileDic, branchesToGetFromRootFiles, encodelabels_OneHot
     return inputs_, labels_
 # endregion ######### Methods ######### 
 
-# region ######### get dataset from root files with uproot4 ######### 
+
+print("\n########## BEGIN PYTHON SCRIPT ############")
+
+# region ######### Get dataset from root files with uproot4 ######### 
 # ml_variables are values stored in branches from TTree
 inputs, labels = buildDataset(cfg.testData_basepath, cfg.fileDic, cfg.ml_variables)
 validationEntryCount = -10000
@@ -77,25 +72,23 @@ inputs_validation = inputs[validationEntryCount:]
 labels_validation = labels[validationEntryCount:]
 inputs_train = inputs[:validationEntryCount]
 label_train = inputs[:validationEntryCount]
-# endregion ######### get data from root files with uproot4 ######### 
+# endregion ######### Get dataset from root files with uproot4 ######### 
 
 
 # region ######### Tensorflow / Keras ######### 
 # region ######### NN Model ######### 
-# NN with 9 Input Nodes, 100 hidden nodes and 1 Output Node (Probability of being Signal/background)
 model = tf.keras.Sequential()
 model.add(tf.keras.Input(shape=(len(cfg.ml_variables),), name="inputLayer"))
 model.add(tf.keras.layers.Dense(64, activation=tf.nn.relu, input_shape=(len(cfg.ml_variables),), name="dense_1"))
 model.add(tf.keras.layers.Dense(32, activation=tf.nn.relu, input_shape=(len(cfg.ml_variables),), name="dense_2"))
 model.add(tf.keras.layers.Dense(2, activation=tf.nn.softmax, name="predictions"))
-
-model.summary()
 # endregion ######### NN Model ######### 
 
+model.summary()
 loss_fn = tf.keras.losses.CategoricalCrossentropy(from_logits=True)
-
 model.compile(optimizer='adam', loss=loss_fn, metrics=['accuracy'])
 
+# region ######### Training ######### 
 history = model.fit(
     inputs, 
     labels, 
@@ -103,10 +96,10 @@ history = model.fit(
     epochs=10,
     validation_data=(inputs_validation, labels_validation)
 )
+# endregion ######### Training ######### 
 
 print("\n")
 print(history.history)
 # endregion ######### Tensorflow / Keras ######### 
-
 
 print("########## END PYTHON SCRIPT ############\n")

@@ -1,5 +1,4 @@
 # region ######### Classes ######### 
-
 from enum import Enum, unique
 # If needed to compare Enum with int -> use IntEnum
 # Category.name -> z.B. Category.GenuineTau.name == 'GenuineTau'
@@ -20,12 +19,9 @@ class TBranches(Enum): # these are branches in TTrees
     Tau_ecalEnergy = 6.0
     Tau_hcalEnergy = 7.0
     Tau_ip3d = 8.0
-
 # endregion ######### Classes ######### 
 
-
 # region ######### Global stuff ######### 
-
 # region ######### Paths and files ######### 
 from os import path
 basepath = '/work/aissac/'
@@ -44,6 +40,5 @@ fileDic = {
 ml_variables = [member for name, member in TBranches.__members__.items()]
 ml_categories = [member for name, member in MLCategory.__members__.items()]
 # endregion ######### ML Lists ######### 
-
 # endregion ######### Global stuff ######### 
 
