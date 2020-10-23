@@ -1,15 +1,15 @@
-# region ######### Classes ######### 
+# region ######### Classes and Functions ######### 
 from enum import Enum, unique
 # If needed to compare Enum with int -> use IntEnum
-# Category.name -> z.B. Category.GenuineTau.name == 'GenuineTau'
-# Category.value -> z.B. Category.GenuineTau.value == 0.0
+# Category.name -> e.g. Category.GenuineTau.name == 'GenuineTau'
+# Category.value -> e.g. Category.GenuineTau.value == 0.0
 @unique
 class MLCategory(Enum):
     GenuineTau = 0.0
     FakeTau = 1.0
 
 @unique
-class TBranches(Enum): # these are branches in TTrees
+class TBranches(Enum): # these are branches in TTrees, also used name "TBranches", to not collide with ROOTs TBranch class
     Tau_pt = 0.0
     Tau_eta = 1.0
     Tau_phi = 2.0
@@ -19,6 +19,21 @@ class TBranches(Enum): # these are branches in TTrees
     Tau_ecalEnergy = 6.0
     Tau_hcalEnergy = 7.0
     Tau_ip3d = 8.0
+
+# NEEDS TO BE MOVED TO UTILS OR SOMETHING
+import numpy as np
+def mapOneHotVectorToMLCategoryEnum(oneHotVector):
+    oneHotMatrix = np.identity(len(MLCategory.__members__.items()))
+    matchedEnumValue = None
+    for i in range(oneHotMatrix.shape[0]):
+        if(np.array_equal(oneHotMatrix[i], oneHotVector)):
+            matchedEnumValue = float(i)
+            break
+    if matchedEnumValue is not None:
+        return MLCategory(matchedEnumValue)
+    else:
+        return None
+
 # endregion ######### Classes ######### 
 
 # region ######### Global stuff ######### 
