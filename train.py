@@ -31,7 +31,7 @@ def rootTTree2numpy(path_, rootFile):
     ttree = f['tauEDAnalyzer']['Events'] # TTree name: 'Events'
     return ttree.arrays(library="np")
 
-def buildDataset(path_, fileDic, branchesToGetFromRootFiles, encodelabels_OneHot = True):
+def buildDataset(path_, fileDic, branchesToGetFromRootFiles, encodelabels_OneHot = True, generateHistograms = True):
     inputs_ = [] 
     labels_ = []
     branchNames = [branch.name for branch in branchesToGetFromRootFiles]
@@ -49,8 +49,6 @@ def buildDataset(path_, fileDic, branchesToGetFromRootFiles, encodelabels_OneHot
     # Stack all labels_ horizontally
     # Since all labels are appended in the above for loop using category.value -> labels are always sorted!
     labels_ = np.hstack(labels_)
-    #uniques, ids = np.unique(labels_, return_inverse=True)
-
 
     if(encodelabels_OneHot):
         labels_ = tf.keras.utils.to_categorical(labels_)
@@ -60,8 +58,9 @@ def buildDataset(path_, fileDic, branchesToGetFromRootFiles, encodelabels_OneHot
 
     # Generate Histograms
     # get slice indices of each category e.g. all indices of genuine taus stored as tuple (beginningIndex, EndIndex)
-    categorySliceIndices = getCategorySliceIndicesFromSortedArray(labels_, encodelabels_OneHot)
-    plotHistogram(inputs_, labels_, categorySliceIndices)
+    if(generateHistograms):
+        categorySliceIndices = getCategorySliceIndicesFromSortedArray(labels_, encodelabels_OneHot)
+        plotHistograms(inputs_, labels_, categorySliceIndices)
 
     # Shuffle inputs_/labels_
     indices = np.arange(labels_.shape[0])
@@ -71,16 +70,26 @@ def buildDataset(path_, fileDic, branchesToGetFromRootFiles, encodelabels_OneHot
     
     return inputs_, labels_
 
-def plotHistogram(data, labels, categorySliceIndices):
-    # TODO: BINS + AXIS 
+def plotHistograms(data, labels, categorySliceIndices, nBins=99):
+    # TODO: X-Axis 
     for i in range(data.shape[1]):
+        variable = cfg.TBranches(float(i))
         for j in range(len(categorySliceIndices)):
             category = categorySliceIndices[j][0]
             beginSliceIndex = categorySliceIndices[j][1]
             endSliceIndex = categorySliceIndices[j][2]
-            plt.hist(data[beginSliceIndex:endSliceIndex, i], bins=100, alpha=0.5, label=category.name)
+            histoData = data[beginSliceIndex:endSliceIndex, i]
+            p = np.percentile(histoData, [1, 99])
+            bins = np.linspace(p[0], p[1], nBins)
+            plt.hist(histoData, bins=bins, alpha=0.7, label=category.name)
+
+        plt.title(variable.name)
+        plt.ylabel("frequency")
+        logScaleVariables = (cfg.TBranches.Tau_ecalEnergy, cfg.TBranches.Tau_hcalEnergy, cfg.TBranches.Tau_mass)
+        if(variable in logScaleVariables):
+            plt.yscale("log")
         plt.legend(loc='upper right')
-        plt.savefig("Histo_{}.png".format(cfg.TBranches(float(i)).name))
+        plt.savefig("Histo_{}.png".format(variable.name))
         plt.clf()
     
 def getCategorySplitIndicesFromSorted_OneHotArray(sortedOneHotArray):
@@ -145,7 +154,7 @@ def getCategorySliceIndicesFromSortedArray(sortedArray, IsOneHotArray):
         else:
             categorySlices.append(
                     (
-                        cfg.TBranches(sortedArray[categorySplitIndices[i]]), 
+                        cfg.MLCategory(sortedArray[categorySplitIndices[i]]), 
                         categorySplitIndices[i], 
                         categorySplitIndices[i+1]
                     )
@@ -159,9 +168,12 @@ print("\n########## BEGIN PYTHON SCRIPT ############")
 
 # region ######### Get dataset from root files with uproot4 ######### 
 # ml_variables are values stored in branches from TTree
-inputs, labels = buildDataset(cfg.testData_basepath, cfg.fileDic, cfg.ml_variables)
+encodelabels_OneHot = True
+generateHistograms = False
+inputs, labels = buildDataset(cfg.testData_basepath, cfg.fileDic, cfg.ml_variables, encodelabels_OneHot=encodelabels_OneHot, generateHistograms=generateHistograms)
 from sklearn.model_selection import train_test_split
-inputs_train, inputs_validation, labels_train, labels_validation = train_test_split(inputs, labels, test_size=0.1, random_state=0)
+inputs_train, inputs_testAndvalidation, labels_train, labels_testAndvalidation = train_test_split(inputs, labels, test_size=0.3, random_state=0)
+inputs_validation, inputs_test, labels_validation, labels_test = train_test_split(inputs_testAndvalidation, labels_testAndvalidation, test_size=0.5, random_state=0)
 # endregion ######### Get dataset from root files with uproot4 ######### 
 
 
@@ -179,14 +191,58 @@ loss_fn = tf.keras.losses.CategoricalCrossentropy(from_logits=True)
 model.compile(optimizer='adam', loss=loss_fn, metrics=['accuracy'])
 
 # region ######### Training ######### 
-# history = model.fit(
-#     inputs, 
-#     labels, 
-#     batch_size=100,
-#     epochs=10,
-#     validation_data=(inputs_validation, labels_validation)
-# )
+history = model.fit(
+    inputs_train, 
+    labels_train, 
+    batch_size=100,
+    epochs=10,
+    validation_data=(inputs_validation, labels_validation)
+)
 # endregion ######### Training ######### 
+
+
+
+# NN output plot
+predictions = model.predict(inputs_test)
+print(predictions)
+if(encodelabels_OneHot):
+    # TODO: check which order is actually signal (genuineTau) and which are background (fakeTau)
+    genuineTau_decisions = predictions[:,0]
+    fakeTau_decisions = predictions[:,1]
+
+plt.hist(fakeTau_decisions, color='red', label='fake', 
+         histtype='step', # lineplot that's unfilled
+         density=True ) # normalize to form a probability density
+plt.hist(genuineTau_decisions, color='blue', label='genuine', 
+         histtype='step', # lineplot that's unfilled
+         density=True, # normalize to form a probability density
+         linestyle='--' )
+plt.xlabel('Neural Network output') # add x-axis label
+plt.ylabel('Arbitrary units') # add y-axis label
+plt.legend() # add legend
+plt.savefig("NN_output.png")
+plt.clf()
+
+from sklearn.metrics import roc_curve, auc
+# most tutorials slice the prediction for whatever reason with [:,1] but why?
+# predictions_ = predictions[:, 1]
+
+fpr, tpr, _ = roc_curve(labels_test.argmax(axis=1), predictions.argmax(axis=1))
+
+roc_auc = auc(fpr, tpr) # area under curve (AUC), ROC = Receiver operating characteristic
+plt.plot(fpr, tpr, label='ROC (area = %0.2f)'%(roc_auc)) # plot test ROC curve
+plt.plot([0, 1], # x from 0 to 1
+         [0, 1], # y from 0 to 1
+         '--', # dashed line
+         color='grey', label='Luck')
+
+plt.xlabel('False Positive Rate') # x-axis label
+plt.ylabel('True Positive Rate') # y-axis label
+plt.title('Receiver operating characteristic (ROC) curve') # title
+plt.legend() # add legend
+plt.grid() # add grid
+plt.savefig("ROC_Curve.png")
+plt.clf()
 
 print("\n")
 print(history.history)

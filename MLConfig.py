@@ -34,6 +34,10 @@ def mapOneHotVectorToMLCategoryEnum(oneHotVector):
     else:
         return None
 
+def mapMLCategoryEnumToOneHotVector(mlCategoryEnum):
+    oneHotVector = np.zeros(len(MLCategory.__members__.items()))
+    oneHotVector[int(mlCategoryEnum.value)] = 1.0
+    return oneHotVector
 # endregion ######### Classes ######### 
 
 # region ######### Global stuff ######### 
