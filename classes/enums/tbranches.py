@@ -1,11 +1,11 @@
 from enum import Enum, unique
-from .default_enummeta import DefaultEnumMeta
+from .enumbase import EnumBase
 # If needed to compare Enum with int -> use IntEnum
 # TBranches.name -> e.g. TBranches.Tau_pt.name == 'Tau_pt'
 # TBranches.value -> e.g. TBranches.Tau_pt.value == 0.0
 
 @unique
-class TBranches(Enum, metaclass=DefaultEnumMeta): # these are branches in TTrees, also used name "TBranches" to not collide with ROOTs TBranch class
+class TBranches(EnumBase): # these are branches in TTrees, also used name "TBranches" to not collide with ROOTs TBranch class
     Tau_pt = 0.0
     Tau_eta = 1.0
     Tau_phi = 2.0

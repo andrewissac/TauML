@@ -55,8 +55,21 @@ def buildDataset(cfg: MLConfig):
     inputs_ = np.vstack(inputs_)
 
     # Stack all labels_ horizontally
-    # Since all labels are appended in the above for loop using category.value -> labels are always sorted!
     labels_ = np.hstack(labels_)
+
+    # Sort all inputs/labels to have a clear separation
+    indices = np.argsort(labels_)
+    inputs_ = inputs_[indices]
+    labels_ = labels_[indices]
+
+    # region Getting rid of Taus with dxy = -999
+    # selectionMask = inputs_[:, int(TBranches.Tau_dxy)] < -900
+    # inputs_ = inputs_[selectionMask] # pruned for dxy < -900
+    # labels_ = labels_[selectionMask] # pruned for dxy < -900
+
+    # print("Input shape: ", inputs_.shape)
+    # print("Labels shape: ", labels_.shape)
+    # endregion
 
     # TODO: SORT LABELS BY ARGSORT THEN USE THE INDICES TO SORT INPUTS
 
@@ -70,7 +83,9 @@ def buildDataset(cfg: MLConfig):
     # get slice indices of each category e.g. all indices of genuine taus stored as tuple (beginningIndex, EndIndex)
     if(cfg.generateHistograms):
         categorySliceIndices = getCategorySliceIndicesFromSortedArray(labels_, cfg.encodeLabels_OneHot)
-        plotHistograms(inputs_, labels_, categorySliceIndices, cfg.plotsOutputDir)
+        print("Categories that are being plotted with their corresponding slice indices: ")
+        print(categorySliceIndices)
+        plotHistograms(inputs_, labels_, categorySliceIndices, cfg.plotsOutputDir, nBins=30)
 
     # Shuffle inputs_/labels_
     indices = np.arange(labels_.shape[0])
@@ -91,7 +106,7 @@ def plotHistograms(data, labels, categorySliceIndices, outputDirPath, nBins=99):
             histoData = data[beginSliceIndex:endSliceIndex, i]
             p = np.percentile(histoData, [1, 99])
             bins = np.linspace(p[0], p[1], nBins)
-            plt.hist(histoData, bins=bins, alpha=0.7, label=category.name)
+            plt.hist(histoData, bins=bins, alpha=0.7, label=category.name, histtype="step")
 
         plt.title(variable.name)
         plt.ylabel("frequency")
@@ -158,10 +173,9 @@ def getCategorySliceIndicesFromSortedArray(sortedArray, IsOneHotArray):
     categorySlices = []
     for i in range(len(categorySplitIndices) - 1):
         if(IsOneHotArray):
-            from utils.enum_utils import convertOneHotVectorToEnum
             categorySlices.append(
                     (
-                        convertOneHotVectorToEnum(sortedArray[categorySplitIndices[i]], Category), 
+                        Category.oneHotVectorToEnum(sortedArray[categorySplitIndices[i]]), 
                         categorySplitIndices[i], 
                         categorySplitIndices[i+1]
                     )
@@ -228,18 +242,18 @@ if(cfg.encodeLabels_OneHot):
     genuineTau_decisions = predictions[:,0]
     fakeTau_decisions = predictions[:,1]
 
-plt.hist(fakeTau_decisions, color='red', label='fake', 
-         histtype='step', # lineplot that's unfilled
-         density=True ) # normalize to form a probability density
-plt.hist(genuineTau_decisions, color='blue', label='genuine', 
-         histtype='step', # lineplot that's unfilled
-         density=True, # normalize to form a probability density
-         linestyle='--' )
-plt.xlabel('Neural Network output') # add x-axis label
-plt.ylabel('Arbitrary units') # add y-axis label
-plt.legend() # add legend
-plt.savefig(path.join(cfg.plotsOutputDir, "NN_output.png"))
-plt.clf()
+    plt.hist(fakeTau_decisions, color='red', label='fake', 
+            histtype='step', # lineplot that's unfilled
+            density=True ) # normalize to form a probability density
+    plt.hist(genuineTau_decisions, color='blue', label='genuine', 
+            histtype='step', # lineplot that's unfilled
+            density=True, # normalize to form a probability density
+            linestyle='--' )
+    plt.xlabel('Neural Network output') # add x-axis label
+    plt.ylabel('Arbitrary units') # add y-axis label
+    plt.legend() # add legend
+    plt.savefig(path.join(cfg.plotsOutputDir, "NN_output.png"))
+    plt.clf()
 
 from sklearn.metrics import roc_curve, auc
 # most tutorials slice the prediction for whatever reason with [:,1] but why?
