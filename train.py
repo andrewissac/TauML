@@ -8,9 +8,13 @@ import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
 import pickle
-import MLConfig as cfg
 from os import path
 from sklearn.utils import shuffle
+from classes.mlconfig import MLConfig
+from classes.enums.category import Category
+from classes.enums.tbranches import TBranches
+from utils.bashcolors import bcolors
+
 
 # region ######### Methods ######### 
 def shuffleNumpyArrays(*args):
@@ -31,13 +35,17 @@ def rootTTree2numpy(path_, rootFile):
     ttree = f['tauEDAnalyzer']['Events'] # TTree name: 'Events'
     return ttree.arrays(library="np")
 
-def buildDataset(path_, fileDic, branchesToGetFromRootFiles, encodelabels_OneHot = True, generateHistograms = True):
+def buildDataset(cfg: MLConfig):
+    if not isinstance(cfg, MLConfig):
+        raise TypeError
+
     inputs_ = [] 
     labels_ = []
-    branchNames = [branch.name for branch in branchesToGetFromRootFiles]
-    for category, rootFilesList in fileDic.items(): # category is the key and rootFiles is the value
+    branchNames = [branch.name for branch in cfg.variables]
+
+    for category, rootFilesList in cfg.rootFilesDictionary.items(): # category is the key and rootFiles is the value
         for rootFile in rootFilesList:
-            tree = rootTTree2numpy(path_, rootFile)
+            tree = rootTTree2numpy(cfg.rootFilesDir, rootFile)
             entryCount = tree[branchNames[0]].shape[0]
             # ml_variable.name is the branch name of the TTree. Each branch has one float variable e.g. Tau_pt
             inputs_.append(np.vstack([np.array(tree[branch], dtype=np.float32) for branch in branchNames]).T)
@@ -50,7 +58,9 @@ def buildDataset(path_, fileDic, branchesToGetFromRootFiles, encodelabels_OneHot
     # Since all labels are appended in the above for loop using category.value -> labels are always sorted!
     labels_ = np.hstack(labels_)
 
-    if(encodelabels_OneHot):
+    # TODO: SORT LABELS BY ARGSORT THEN USE THE INDICES TO SORT INPUTS
+
+    if(cfg.encodeLabels_OneHot):
         labels_ = tf.keras.utils.to_categorical(labels_)
 
     # print(inputs_[:,:1].min()) # shows min Tau_pt
@@ -58,9 +68,9 @@ def buildDataset(path_, fileDic, branchesToGetFromRootFiles, encodelabels_OneHot
 
     # Generate Histograms
     # get slice indices of each category e.g. all indices of genuine taus stored as tuple (beginningIndex, EndIndex)
-    if(generateHistograms):
-        categorySliceIndices = getCategorySliceIndicesFromSortedArray(labels_, encodelabels_OneHot)
-        plotHistograms(inputs_, labels_, categorySliceIndices)
+    if(cfg.generateHistograms):
+        categorySliceIndices = getCategorySliceIndicesFromSortedArray(labels_, cfg.encodeLabels_OneHot)
+        plotHistograms(inputs_, labels_, categorySliceIndices, cfg.plotsOutputDir)
 
     # Shuffle inputs_/labels_
     indices = np.arange(labels_.shape[0])
@@ -70,10 +80,10 @@ def buildDataset(path_, fileDic, branchesToGetFromRootFiles, encodelabels_OneHot
     
     return inputs_, labels_
 
-def plotHistograms(data, labels, categorySliceIndices, nBins=99):
-    # TODO: X-Axis 
+def plotHistograms(data, labels, categorySliceIndices, outputDirPath, nBins=99):
+    # TODO: X-Axis label
     for i in range(data.shape[1]):
-        variable = cfg.TBranches(float(i))
+        variable = TBranches(float(i))
         for j in range(len(categorySliceIndices)):
             category = categorySliceIndices[j][0]
             beginSliceIndex = categorySliceIndices[j][1]
@@ -85,11 +95,14 @@ def plotHistograms(data, labels, categorySliceIndices, nBins=99):
 
         plt.title(variable.name)
         plt.ylabel("frequency")
-        logScaleVariables = (cfg.TBranches.Tau_ecalEnergy, cfg.TBranches.Tau_hcalEnergy, cfg.TBranches.Tau_mass)
+        logScaleVariables = (TBranches.Tau_ecalEnergy, TBranches.Tau_hcalEnergy, TBranches.Tau_mass)
         if(variable in logScaleVariables):
             plt.yscale("log")
         plt.legend(loc='upper right')
-        plt.savefig("Histo_{}.png".format(variable.name))
+        from os import path
+        filename = "Histo_{}.png".format(variable.name)
+        outputFilePath = path.join(outputDirPath, filename)
+        plt.savefig(outputFilePath)
         plt.clf()
     
 def getCategorySplitIndicesFromSorted_OneHotArray(sortedOneHotArray):
@@ -135,6 +148,7 @@ def getCategorySliceIndicesFromSortedArray(sortedArray, IsOneHotArray):
     Get and return list of tuples of the beginning and ending index of a category-slice in the sortedArray
     slice: (beginIndex,endIndex) beginIndex is inclusive, endIndex is exlusive! 
     """
+
     categorySplitIndices = []
     if(IsOneHotArray):
         categorySplitIndices = getCategorySplitIndicesFromSorted_OneHotArray(sortedArray)
@@ -144,9 +158,10 @@ def getCategorySliceIndicesFromSortedArray(sortedArray, IsOneHotArray):
     categorySlices = []
     for i in range(len(categorySplitIndices) - 1):
         if(IsOneHotArray):
+            from utils.enum_utils import convertOneHotVectorToEnum
             categorySlices.append(
                     (
-                        cfg.mapOneHotVectorToMLCategoryEnum(sortedArray[categorySplitIndices[i]]), 
+                        convertOneHotVectorToEnum(sortedArray[categorySplitIndices[i]], Category), 
                         categorySplitIndices[i], 
                         categorySplitIndices[i+1]
                     )
@@ -154,7 +169,7 @@ def getCategorySliceIndicesFromSortedArray(sortedArray, IsOneHotArray):
         else:
             categorySlices.append(
                     (
-                        cfg.MLCategory(sortedArray[categorySplitIndices[i]]), 
+                        Category(sortedArray[categorySplitIndices[i]]), 
                         categorySplitIndices[i], 
                         categorySplitIndices[i+1]
                     )
@@ -164,13 +179,15 @@ def getCategorySliceIndicesFromSortedArray(sortedArray, IsOneHotArray):
 # endregion ######### Methods ######### 
 
 
-print("\n########## BEGIN PYTHON SCRIPT ############")
+print("\n" + bcolors.OKGREEN + bcolors.BOLD + "########## BEGIN PYTHON SCRIPT ############" + bcolors.ENDC)
 
 # region ######### Get dataset from root files with uproot4 ######### 
 # ml_variables are values stored in branches from TTree
-encodelabels_OneHot = True
-generateHistograms = False
-inputs, labels = buildDataset(cfg.testData_basepath, cfg.fileDic, cfg.ml_variables, encodelabels_OneHot=encodelabels_OneHot, generateHistograms=generateHistograms)
+from utils.mlconfig_utils import generateMLConfig
+cfg = generateMLConfig()
+
+#inputs, labels = buildDataset(cfg.rootFilesDir, cfg.rootFilesDictionary, cfg.variables, histogramOutputDirPath=cfg.plotsOutputDir, encodelabels_OneHot=cfg.encodeLabels_OneHot, generateHistograms=cfg.generateHistograms)
+inputs, labels = buildDataset(cfg)
 from sklearn.model_selection import train_test_split
 inputs_train, inputs_testAndvalidation, labels_train, labels_testAndvalidation = train_test_split(inputs, labels, test_size=0.3, random_state=0)
 inputs_validation, inputs_test, labels_validation, labels_test = train_test_split(inputs_testAndvalidation, labels_testAndvalidation, test_size=0.5, random_state=0)
@@ -180,9 +197,9 @@ inputs_validation, inputs_test, labels_validation, labels_test = train_test_spli
 # region ######### Tensorflow / Keras ######### 
 # region ######### NN Model ######### 
 model = tf.keras.Sequential()
-model.add(tf.keras.Input(shape=(len(cfg.ml_variables),), name="inputLayer"))
-model.add(tf.keras.layers.Dense(64, activation=tf.nn.relu, input_shape=(len(cfg.ml_variables),), name="dense_1"))
-model.add(tf.keras.layers.Dense(32, activation=tf.nn.relu, input_shape=(len(cfg.ml_variables),), name="dense_2"))
+model.add(tf.keras.Input(shape=(len(cfg.variables),), name="inputLayer"))
+model.add(tf.keras.layers.Dense(64, activation=tf.nn.relu, input_shape=(len(cfg.variables),), name="dense_1"))
+model.add(tf.keras.layers.Dense(32, activation=tf.nn.relu, input_shape=(len(cfg.variables),), name="dense_2"))
 model.add(tf.keras.layers.Dense(2, activation=tf.nn.softmax, name="predictions"))
 # endregion ######### NN Model ######### 
 
@@ -204,8 +221,9 @@ history = model.fit(
 
 # NN output plot
 predictions = model.predict(inputs_test)
-print(predictions)
-if(encodelabels_OneHot):
+#print(predictions)
+
+if(cfg.encodeLabels_OneHot):
     # TODO: check which order is actually signal (genuineTau) and which are background (fakeTau)
     genuineTau_decisions = predictions[:,0]
     fakeTau_decisions = predictions[:,1]
@@ -220,7 +238,7 @@ plt.hist(genuineTau_decisions, color='blue', label='genuine',
 plt.xlabel('Neural Network output') # add x-axis label
 plt.ylabel('Arbitrary units') # add y-axis label
 plt.legend() # add legend
-plt.savefig("NN_output.png")
+plt.savefig(path.join(cfg.plotsOutputDir, "NN_output.png"))
 plt.clf()
 
 from sklearn.metrics import roc_curve, auc
@@ -241,11 +259,11 @@ plt.ylabel('True Positive Rate') # y-axis label
 plt.title('Receiver operating characteristic (ROC) curve') # title
 plt.legend() # add legend
 plt.grid() # add grid
-plt.savefig("ROC_Curve.png")
+plt.savefig(path.join(cfg.plotsOutputDir, "ROC_Curve.png"))
 plt.clf()
 
 print("\n")
 print(history.history)
 # endregion ######### Tensorflow / Keras ######### 
 
-print("########## END PYTHON SCRIPT ############\n")
+print(bcolors.OKGREEN + bcolors.BOLD + "########## END PYTHON SCRIPT ############\n" + bcolors.ENDC)
