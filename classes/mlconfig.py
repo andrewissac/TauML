@@ -1,9 +1,10 @@
 class MLConfig():
     def __init__(self):
-        self.basePath = ""
-        self.rootFilesDir = ""
-        self.rootFilesDictionary = {}
-        self.plotsOutputDir = ""
+        self.baseWorkPath = ""
+        self.baseCephPath = ""
+        self.datasetsBasePath = ""
+        self.datasetsDic = {}
+        self.plotsOutputPath = ""
         self.variables = []
         self.categories = []
         self.encodeLabels_OneHot = True

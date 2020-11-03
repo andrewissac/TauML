@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
 import pickle
+import glob
 from os import path
 from sklearn.utils import shuffle
 from classes.mlconfig import MLConfig
@@ -30,8 +31,8 @@ def shuffleNumpyArrays(*args):
     except Exception as ex:
         print("shuffleNumpyArrays() - ", ex)
 
-def rootTTree2numpy(path_, rootFile):
-    f = uproot4.open(path.join(path_, rootFile))
+def rootTTree2numpy(rootFilePath):
+    f = uproot4.open(rootFilePath)
     ttree = f['tauEDAnalyzer']['Events'] # TTree name: 'Events'
     return ttree.arrays(library="np")
 
@@ -43,13 +44,16 @@ def buildDataset(cfg: MLConfig):
     labels_ = []
     branchNames = [branch.name for branch in cfg.variables]
 
-    for category, rootFilesList in cfg.rootFilesDictionary.items(): # category is the key and rootFiles is the value
-        for rootFile in rootFilesList:
-            tree = rootTTree2numpy(cfg.rootFilesDir, rootFile)
-            entryCount = tree[branchNames[0]].shape[0]
-            # ml_variable.name is the branch name of the TTree. Each branch has one float variable e.g. Tau_pt
-            inputs_.append(np.vstack([np.array(tree[branch], dtype=np.float32) for branch in branchNames]).T)
-            labels_.append(np.full((entryCount,), category.value, dtype=np.float32))
+    for category, datasets in cfg.datasetsDic.items(): # category is the key and rootFiles is the value
+        for datasetPath in datasets:
+            rootFiles = [f for f in glob.glob(datasetPath + "/*.root", recursive=False)]
+            for rootFile in rootFiles:
+                print(rootFile)
+                tree = rootTTree2numpy(rootFile)
+                entryCount = tree[branchNames[0]].shape[0]
+                # ml_variable.name is the branch name of the TTree. Each branch has one float variable e.g. Tau_pt
+                inputs_.append(np.vstack([np.array(tree[branch], dtype=np.float32) for branch in branchNames]).T)
+                labels_.append(np.full((entryCount,), category.value, dtype=np.float32))
 
     # Stack all inputs_ vertically
     inputs_ = np.vstack(inputs_)
@@ -57,21 +61,33 @@ def buildDataset(cfg: MLConfig):
     # Stack all labels_ horizontally
     labels_ = np.hstack(labels_)
 
-    # Sort all inputs/labels to have a clear separation
+    # Sort all inputs/labels to have a clear separation for plotting histograms
     indices = np.argsort(labels_)
     inputs_ = inputs_[indices]
     labels_ = labels_[indices]
+    del indices
 
-    # region Getting rid of Taus with dxy = -999
-    # selectionMask = inputs_[:, int(TBranches.Tau_dxy)] < -900
-    # inputs_ = inputs_[selectionMask] # pruned for dxy < -900
-    # labels_ = labels_[selectionMask] # pruned for dxy < -900
+    # region Getting rid of Taus using python instead of C++ TauAnalyzer with dxy = -999 and decayModes 5,6
+    # dxy_selectionMask = inputs_[:, int(TBranches.Tau_dxy)] > -990
+    # decayMode5_selectionMask = inputs_[:, int(TBranches.Tau_decayMode)] != 5
+    # decayMode6_selectionMask = inputs_[:, int(TBranches.Tau_decayMode)] != 6
+    # selectionMask = np.logical_and(np.logical_and(dxy_selectionMask, decayMode5_selectionMask), decayMode6_selectionMask)
+    # inputs_ = inputs_[selectionMask] 
+    # labels_ = labels_[selectionMask] 
+    # unique, counts = np.unique(selectionMask, return_counts=True)
+    # print(dict(zip(unique, counts)))
+    
+    # unique, counts = np.unique(inputs_[:,int(TBranches.Tau_decayMode)], return_counts=True)
+    # print("Decay modes and their counts: ")
+    # print(dict(zip(unique, counts)))
 
-    # print("Input shape: ", inputs_.shape)
-    # print("Labels shape: ", labels_.shape)
+    print("Input shape: ", inputs_.shape)
+    print("Labels shape: ", labels_.shape)
     # endregion
 
-    # TODO: SORT LABELS BY ARGSORT THEN USE THE INDICES TO SORT INPUTS
+    categorySliceIndices = getCategorySliceIndicesFromSorted1DArray(labels_, cfg.categories)
+    print("Categories that are being plotted with their corresponding slice indices: ")
+    print(categorySliceIndices)
 
     if(cfg.encodeLabels_OneHot):
         labels_ = tf.keras.utils.to_categorical(labels_)
@@ -82,12 +98,9 @@ def buildDataset(cfg: MLConfig):
     # Generate Histograms
     # get slice indices of each category e.g. all indices of genuine taus stored as tuple (beginningIndex, EndIndex)
     if(cfg.generateHistograms):
-        categorySliceIndices = getCategorySliceIndicesFromSortedArray(labels_, cfg.encodeLabels_OneHot)
-        print("Categories that are being plotted with their corresponding slice indices: ")
-        print(categorySliceIndices)
-        plotHistograms(inputs_, labels_, categorySliceIndices, cfg.plotsOutputDir, nBins=30)
+        plotHistograms(inputs_, labels_, categorySliceIndices, cfg.plotsOutputPath, nBins=30)
 
-    # Shuffle inputs_/labels_
+    # Shuffle inputs_/labels_ for training
     indices = np.arange(labels_.shape[0])
     np.random.shuffle(indices)
     inputs_ = inputs_[indices]
@@ -96,9 +109,10 @@ def buildDataset(cfg: MLConfig):
     return inputs_, labels_
 
 def plotHistograms(data, labels, categorySliceIndices, outputDirPath, nBins=99):
-    # TODO: X-Axis label
+    # iterate through all tbranches
     for i in range(data.shape[1]):
         variable = TBranches(float(i))
+        #iterate through all categories
         for j in range(len(categorySliceIndices)):
             category = categorySliceIndices[j][0]
             beginSliceIndex = categorySliceIndices[j][1]
@@ -119,75 +133,27 @@ def plotHistograms(data, labels, categorySliceIndices, outputDirPath, nBins=99):
         outputFilePath = path.join(outputDirPath, filename)
         plt.savefig(outputFilePath)
         plt.clf()
-    
-def getCategorySplitIndicesFromSorted_OneHotArray(sortedOneHotArray):
-    """
-    Suppose myArr is a sorted (!) oneHotArray that is sorted:
-    myArr = [[1.0, 0.0], [1.0, 0.0], [1.0, 0.0], [0.0, 1.0]]
-    myArr.shape[1] # this will return the count of categories, in this example 2
-    np.searchsorted(myArray[:,0], 1.0, side='left') # this will return the index of the first occurence of [1.0, 0.0], in this example: 0
-    np.searchsorted(myArray[:,1], 1.0, side='left') # this will return the index of the first occurence of [0.0, 1.0], in this example: 3
-    -> loop over the categories will return all indices where the categories change.
-    """
-    entryCount = sortedOneHotArray.shape[0]
-    categoryCount = sortedOneHotArray.shape[1]
 
-    categorySplitIndices = []
-    for i in range(categoryCount):
-        categorySplitIndices.append(np.searchsorted(sortedOneHotArray[:,i], 1.0, side='left'))
-    categorySplitIndices.append(entryCount) # append index of very last element + 1
-
-    return categorySplitIndices
-
-def getCategorySplitIndicesFromSorted_1DArray(sorted1DArray):
-    """
-    Suppose myArr is a sorted (!) 1D Array :
-    myArr = [0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0, 3.0]
-    np.unique(..) will find the count of categories, in this example 4
-    indices where the category changes are simply computed by adding their count
-    """
-    categories, counts = np.unique(sorted1DArray, return_counts=True)
-    print(categories, counts)
-
-    categorySplitIndices = []
-    splitIndex = 0
-    for i in range(len(categories)):
-        categorySplitIndices.append(splitIndex)
-        splitIndex += counts[i]
-    categorySplitIndices.append(np.sum(counts)) # append index of very last element + 1
-    
-    return categorySplitIndices
-
-def getCategorySliceIndicesFromSortedArray(sortedArray, IsOneHotArray):
+def getCategorySliceIndicesFromSorted1DArray(sorted1DArray, categoryList):
     """
     Get and return list of tuples of the beginning and ending index of a category-slice in the sortedArray
-    slice: (beginIndex,endIndex) beginIndex is inclusive, endIndex is exlusive! 
+    slice: (beginIndex,endIndex, elementCount) beginIndex is inclusive, endIndex is exlusive! 
     """
-
     categorySplitIndices = []
-    if(IsOneHotArray):
-        categorySplitIndices = getCategorySplitIndicesFromSorted_OneHotArray(sortedArray)
-    else:
-        categorySplitIndices = getCategorySplitIndicesFromSorted_1DArray(sortedArray)
+    for i in range(len(categoryList)):
+        categorySplitIndices.append(np.searchsorted(sorted1DArray, categoryList[i].value, side='left'))
+    categorySplitIndices.append(sorted1DArray.shape[0]) # append index of very last element + 1
 
     categorySlices = []
     for i in range(len(categorySplitIndices) - 1):
-        if(IsOneHotArray):
-            categorySlices.append(
-                    (
-                        Category.oneHotVectorToEnum(sortedArray[categorySplitIndices[i]]), 
-                        categorySplitIndices[i], 
-                        categorySplitIndices[i+1]
-                    )
+        categorySlices.append(
+                (
+                    Category(sorted1DArray[categorySplitIndices[i]]), 
+                    categorySplitIndices[i], 
+                    categorySplitIndices[i+1],
+                    categorySplitIndices[i+1]-categorySplitIndices[i]
                 )
-        else:
-            categorySlices.append(
-                    (
-                        Category(sortedArray[categorySplitIndices[i]]), 
-                        categorySplitIndices[i], 
-                        categorySplitIndices[i+1]
-                    )
-                )
+            )
 
     return categorySlices
 # endregion ######### Methods ######### 
@@ -200,10 +166,10 @@ print("\n" + bcolors.OKGREEN + bcolors.BOLD + "########## BEGIN PYTHON SCRIPT ##
 from utils.mlconfig_utils import generateMLConfig
 cfg = generateMLConfig()
 
-#inputs, labels = buildDataset(cfg.rootFilesDir, cfg.rootFilesDictionary, cfg.variables, histogramOutputDirPath=cfg.plotsOutputDir, encodelabels_OneHot=cfg.encodeLabels_OneHot, generateHistograms=cfg.generateHistograms)
 inputs, labels = buildDataset(cfg)
 from sklearn.model_selection import train_test_split
 inputs_train, inputs_testAndvalidation, labels_train, labels_testAndvalidation = train_test_split(inputs, labels, test_size=0.3, random_state=0)
+del inputs, labels
 inputs_validation, inputs_test, labels_validation, labels_test = train_test_split(inputs_testAndvalidation, labels_testAndvalidation, test_size=0.5, random_state=0)
 # endregion ######### Get dataset from root files with uproot4 ######### 
 
@@ -252,7 +218,7 @@ if(cfg.encodeLabels_OneHot):
     plt.xlabel('Neural Network output') # add x-axis label
     plt.ylabel('Arbitrary units') # add y-axis label
     plt.legend() # add legend
-    plt.savefig(path.join(cfg.plotsOutputDir, "NN_output.png"))
+    plt.savefig(path.join(cfg.plotsOutputPath, "NN_output.png"))
     plt.clf()
 
 from sklearn.metrics import roc_curve, auc
@@ -273,7 +239,7 @@ plt.ylabel('True Positive Rate') # y-axis label
 plt.title('Receiver operating characteristic (ROC) curve') # title
 plt.legend() # add legend
 plt.grid() # add grid
-plt.savefig(path.join(cfg.plotsOutputDir, "ROC_Curve.png"))
+plt.savefig(path.join(cfg.plotsOutputPath, "ROC_Curve.png"))
 plt.clf()
 
 print("\n")
