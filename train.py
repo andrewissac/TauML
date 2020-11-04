@@ -18,19 +18,6 @@ from utils.bashcolors import bcolors
 
 
 # region ######### Methods ######### 
-def shuffleNumpyArrays(*args):
-    """ 
-    args must be numpy arrays + have the same length! 
-    but somehow this does not change the arrays outside the function although numpy arrays are mutable (??)
-    """
-    try:
-        indices_ = np.arange(args[0].shape[0])
-        np.random.shuffle(indices_)
-        for arr in args:
-            arr = arr[indices_]
-    except Exception as ex:
-        print("shuffleNumpyArrays() - ", ex)
-
 def rootTTree2numpy(rootFilePath):
     f = uproot4.open(rootFilePath)
     ttree = f['tauEDAnalyzer']['Events'] # TTree name: 'Events'
@@ -122,9 +109,9 @@ def plotHistograms(data, labels, categorySliceIndices, outputDirPath, nBins=99):
             histoData = data[beginSliceIndex:endSliceIndex, i]
             p = np.percentile(histoData, [1, 99])
             bins = np.linspace(p[0], p[1], nBins)
-            plt.hist(histoData, bins=bins, alpha=0.7, label=category.name, histtype="step")
+            plt.hist(histoData, bins=bins, alpha=0.7, label=category.getDisplayname(), histtype="step")
 
-        plt.title(variable.name)
+        plt.title(variable.getDisplayname())
         plt.ylabel("frequency")
         logScaleVariables = (TBranches.Tau_ecalEnergy, TBranches.Tau_hcalEnergy, TBranches.Tau_mass)
         if(variable in logScaleVariables):

@@ -8,3 +8,13 @@ from .enumbase import EnumBase
 class Category(EnumBase):
     GenuineTau = 0.0
     FakeTau = 1.0
+
+    @classmethod
+    def getDisplaynames(self):
+        return {
+            Category.GenuineTau: 'Genuine Taus',
+            Category.FakeTau: 'Fake Taus'
+            }
+    
+    def getDisplayname(self):
+        return self.getDisplaynames()[self]

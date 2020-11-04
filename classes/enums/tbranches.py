@@ -15,3 +15,21 @@ class TBranches(EnumBase): # these are branches in TTrees, also used name "TBran
     Tau_ecalEnergy = 6.0
     Tau_hcalEnergy = 7.0
     Tau_ip3d = 8.0
+
+    @classmethod
+    def getDisplaynames(self):
+        return {
+            TBranches.Tau_pt: 'Tau pt',
+            TBranches.Tau_eta: 'Tau eta',
+            TBranches.Tau_phi: 'Tau phi',
+            TBranches.Tau_mass: 'Tau mass',
+            TBranches.Tau_dxy: 'Tau dxy',
+            TBranches.Tau_decayMode: 'Tau decaymode',
+            TBranches.Tau_ecalEnergy: 'Tau ecal energy',
+            TBranches.Tau_hcalEnergy: 'Tau hcal energy',
+            TBranches.Tau_ip3d: 'Tau ip3d'
+            }
+            
+    def getDisplayname(self):
+        return self.getDisplaynames()[self]
+

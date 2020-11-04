@@ -14,19 +14,20 @@ class EnumBase(Enum, metaclass=DefaultEnumMeta):
     def __int__(self):
         return int(self.value)
 
-    def toOneHotVector(self):
-        """
-        Usage example for class Category(EnumBase):
-        myCategory = Category.FakeTau
-        myOneHotVector= myCategory.toOneHotVector()
-        """
-        oneHotVector = zeros(len(self.getAllMembers()))
-        oneHotVector[int(self)] = 1.0
-        return oneHotVector
+    def __len__(self):
+        return len(self.getAllMembers())
 
     @classmethod
     def getAllMembers(cls):
         return cls.__members__.items()
+    
+    @classmethod
+    def getAllValues(cls):
+        return [m.value for m in cls]
+
+    @classmethod
+    def getAllNames(cls):
+        return [m.name for m in cls]
 
     @classmethod
     def oneHotVectorToEnum(cls, oneHotVector):
@@ -51,3 +52,32 @@ class EnumBase(Enum, metaclass=DefaultEnumMeta):
             return cls(matchedEnumValue)
         else:
             return None
+
+    def toOneHotVector(self):
+        """
+        Usage example for class Category(EnumBase):
+        myCategory = Category.FakeTau
+        myOneHotVector= myCategory.toOneHotVector()
+        """
+        oneHotVector = zeros(len(self))
+        oneHotVector[int(self)] = 1.0
+        return oneHotVector
+
+    # maybe useful one day..
+    # def __new__(cls, *args, **kwargs):
+    #     obj = object.__new__(cls)
+    #     obj._value_ = args
+    #     return obj
+
+    # # if more than a tuple with 2 values is needed for an enum -> override it 
+    # def __init__(self, value: float, displayname: str = None):
+    #     self._firstvalue_ = value
+    #     self._displayname_ = displayname
+
+    # @property
+    # def firstvalue(self):
+    #     return self._firstvalue_
+
+    # @property
+    # def displayname(self):
+    #     return self._displayname_
