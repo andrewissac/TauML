@@ -44,11 +44,11 @@ def buildDataset(cfg: MLConfig):
     labels_ = []
     branchNames = [branch.name for branch in cfg.variables]
 
-    for category, datasets in cfg.datasetsDic.items(): # category is the key and rootFiles is the value
+    for category, datasets in cfg.datasetsList: # category is the key and rootFiles is the value
         for datasetPath in datasets:
             rootFiles = [f for f in glob.glob(datasetPath + "/*.root", recursive=False)]
             for rootFile in rootFiles:
-                print(rootFile)
+                #print(rootFile)
                 tree = rootTTree2numpy(rootFile)
                 entryCount = tree[branchNames[0]].shape[0]
                 # ml_variable.name is the branch name of the TTree. Each branch has one float variable e.g. Tau_pt
@@ -98,6 +98,8 @@ def buildDataset(cfg: MLConfig):
     # Generate Histograms
     # get slice indices of each category e.g. all indices of genuine taus stored as tuple (beginningIndex, EndIndex)
     if(cfg.generateHistograms):
+        from pathlib import Path
+        Path(cfg.plotsOutputPath).mkdir(parents=True, exist_ok=True)
         plotHistograms(inputs_, labels_, categorySliceIndices, cfg.plotsOutputPath, nBins=30)
 
     # Shuffle inputs_/labels_ for training
@@ -160,11 +162,8 @@ def getCategorySliceIndicesFromSorted1DArray(sorted1DArray, categoryList):
 
 
 print("\n" + bcolors.OKGREEN + bcolors.BOLD + "########## BEGIN PYTHON SCRIPT ############" + bcolors.ENDC)
-
 # region ######### Get dataset from root files with uproot4 ######### 
-# ml_variables are values stored in branches from TTree
-from utils.mlconfig_utils import generateMLConfig
-cfg = generateMLConfig()
+cfg = MLConfig.loadFromJsonfile('cfgWithSmallDataset.json')
 
 inputs, labels = buildDataset(cfg)
 from sklearn.model_selection import train_test_split
