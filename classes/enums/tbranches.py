@@ -1,35 +1,18 @@
 from enum import Enum, unique
-from .enumbase import EnumBase
+from .enumbase import EnumBase, EnumVal
 # If needed to compare Enum with int -> use IntEnum
 # TBranches.name -> e.g. TBranches.Tau_pt.name == 'Tau_pt'
 # TBranches.value -> e.g. TBranches.Tau_pt.value == 0.0
 
 @unique
 class TBranches(EnumBase): # these are branches in TTrees, also used name "TBranches" to not collide with ROOTs TBranch class
-    Tau_pt = 0.0
-    Tau_eta = 1.0
-    Tau_phi = 2.0
-    Tau_mass = 3.0
-    Tau_dxy = 4.0
-    Tau_decayMode = 5.0
-    Tau_ecalEnergy = 6.0
-    Tau_hcalEnergy = 7.0
-    Tau_ip3d = 8.0
-
-    @classmethod
-    def getDisplaynames(self):
-        return {
-            TBranches.Tau_pt: 'Tau pt',
-            TBranches.Tau_eta: 'Tau eta',
-            TBranches.Tau_phi: 'Tau phi',
-            TBranches.Tau_mass: 'Tau mass',
-            TBranches.Tau_dxy: 'Tau dxy',
-            TBranches.Tau_decayMode: 'Tau decaymode',
-            TBranches.Tau_ecalEnergy: 'Tau ecal energy',
-            TBranches.Tau_hcalEnergy: 'Tau hcal energy',
-            TBranches.Tau_ip3d: 'Tau ip3d'
-            }
-            
-    def getDisplayname(self):
-        return self.getDisplaynames()[self]
+    Tau_pt = EnumVal(0.0, 'Tau pt')
+    Tau_eta = EnumVal(1.0, 'Tau eta')
+    Tau_phi = EnumVal(2.0, 'Tau phi')
+    Tau_mass = EnumVal(3.0, 'Tau mass')
+    Tau_dxy = EnumVal(4.0, 'Tau dxy')
+    Tau_decayMode = EnumVal(5.0, 'Tau decaymode')
+    Tau_ecalEnergy = EnumVal(6.0, 'Tau ecal energy')
+    Tau_hcalEnergy = EnumVal(7.0, 'Tau hcal energy')
+    Tau_ip3d = EnumVal(8.0, 'Tau ip3d')
 

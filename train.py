@@ -109,9 +109,9 @@ def plotHistograms(data, labels, categorySliceIndices, outputDirPath, nBins=99):
             histoData = data[beginSliceIndex:endSliceIndex, i]
             p = np.percentile(histoData, [1, 99])
             bins = np.linspace(p[0], p[1], nBins)
-            plt.hist(histoData, bins=bins, alpha=0.7, label=category.getDisplayname(), histtype="step")
+            plt.hist(histoData, bins=bins, alpha=0.7, label=category.displayname, histtype="step")
 
-        plt.title(variable.getDisplayname())
+        plt.title(variable.displayname)
         plt.ylabel("frequency")
         logScaleVariables = (TBranches.Tau_ecalEnergy, TBranches.Tau_hcalEnergy, TBranches.Tau_mass)
         if(variable in logScaleVariables):
@@ -164,8 +164,8 @@ inputs_validation, inputs_test, labels_validation, labels_test = train_test_spli
 # region ######### NN Model ######### 
 model = tf.keras.Sequential()
 model.add(tf.keras.Input(shape=(len(cfg.variables),), name="inputLayer"))
-model.add(tf.keras.layers.Dense(64, activation=tf.nn.relu, input_shape=(len(cfg.variables),), name="dense_1"))
-model.add(tf.keras.layers.Dense(32, activation=tf.nn.relu, input_shape=(len(cfg.variables),), name="dense_2"))
+model.add(tf.keras.layers.Dense(32, activation=tf.nn.relu, input_shape=(len(cfg.variables),), name="dense_1"))
+model.add(tf.keras.layers.Dense(16, activation=tf.nn.relu, input_shape=(len(cfg.variables),), name="dense_2"))
 model.add(tf.keras.layers.Dense(2, activation=tf.nn.softmax, name="predictions"))
 # endregion ######### NN Model ######### 
 
@@ -178,7 +178,7 @@ history = model.fit(
     inputs_train, 
     labels_train, 
     batch_size=100,
-    epochs=10,
+    epochs=5,
     validation_data=(inputs_validation, labels_validation)
 )
 # endregion ######### Training ######### 

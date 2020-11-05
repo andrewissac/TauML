@@ -1,7 +1,7 @@
 from enum import Enum, EnumMeta
 from numpy import zeros
 
-# Enables using the first value of an Enum Class to be the default value by default constructor MyEnum()
+# Enables using the first value of an enum class to be the default value by imitating a default constructor: MyEnum()
 class DefaultEnumMeta(EnumMeta):
     default = object()
     def __call__(cls, value=default, *args, **kwargs):
@@ -10,12 +10,27 @@ class DefaultEnumMeta(EnumMeta):
             return next(iter(cls))
         return super().__call__(value, *args, **kwargs)
 
+class EnumVal(object):
+    def __init__(self, value, displayname):
+        self.value = value
+        self.displayname = displayname
+
 class EnumBase(Enum, metaclass=DefaultEnumMeta):
     def __int__(self):
         return int(self.value)
 
     def __len__(self):
         return len(self.getAllMembers())
+
+    def __new__(cls, value):
+        obj = object.__new__(cls)
+        obj._value_ = value.value
+        obj._displayname_ = value.displayname
+        return obj
+
+    @property
+    def displayname(self):
+        return self._displayname_
 
     @classmethod
     def getAllMembers(cls):
@@ -28,6 +43,10 @@ class EnumBase(Enum, metaclass=DefaultEnumMeta):
     @classmethod
     def getAllNames(cls):
         return [m.name for m in cls]
+
+    @classmethod
+    def getAllDisplaynames(cls):
+        return [m.displayname for m in cls]
 
     @classmethod
     def oneHotVectorToEnum(cls, oneHotVector):
@@ -62,22 +81,3 @@ class EnumBase(Enum, metaclass=DefaultEnumMeta):
         oneHotVector = zeros(len(self))
         oneHotVector[int(self)] = 1.0
         return oneHotVector
-
-    # maybe useful one day..
-    # def __new__(cls, *args, **kwargs):
-    #     obj = object.__new__(cls)
-    #     obj._value_ = args
-    #     return obj
-
-    # # if more than a tuple with 2 values is needed for an enum -> override it 
-    # def __init__(self, value: float, displayname: str = None):
-    #     self._firstvalue_ = value
-    #     self._displayname_ = displayname
-
-    # @property
-    # def firstvalue(self):
-    #     return self._firstvalue_
-
-    # @property
-    # def displayname(self):
-    #     return self._displayname_
