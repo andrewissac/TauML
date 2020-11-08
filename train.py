@@ -85,8 +85,6 @@ def buildDataset(cfg: MLConfig):
     # Generate Histograms
     # get slice indices of each category e.g. all indices of genuine taus stored as tuple (beginningIndex, EndIndex)
     if(cfg.generateHistograms):
-        from pathlib import Path
-        Path(cfg.plotsOutputPath).mkdir(parents=True, exist_ok=True)
         plotHistograms(inputs_, labels_, categorySliceIndices, cfg.plotsOutputPath, nBins=30)
 
     # Shuffle inputs_/labels_ for training
@@ -150,36 +148,50 @@ def getCategorySliceIndicesFromSorted1DArray(sorted1DArray, categoryList):
 
 print("\n" + bcolors.OKGREEN + bcolors.BOLD + "########## BEGIN PYTHON SCRIPT ############" + bcolors.ENDC)
 # region ######### Get dataset from root files with uproot4 ######### 
-cfg = MLConfig.loadFromJsonfile('cfgWithSmallDataset.json')
+# TODO: pass config file as argument to train.py
+cfg = MLConfig.loadFromJsonfile('output_smallDataset/cfg.json')
 
 inputs, labels = buildDataset(cfg)
 from sklearn.model_selection import train_test_split
 inputs_train, inputs_testAndvalidation, labels_train, labels_testAndvalidation = train_test_split(inputs, labels, test_size=0.3, random_state=0)
 del inputs, labels
 inputs_validation, inputs_test, labels_validation, labels_test = train_test_split(inputs_testAndvalidation, labels_testAndvalidation, test_size=0.5, random_state=0)
+print(inputs_train.shape)
+print(labels_train.shape)
+print(inputs_validation.shape)
+print(labels_validation.shape)
+print(inputs_test.shape)
+print(labels_test.shape)
 # endregion ######### Get dataset from root files with uproot4 ######### 
 
 
 # region ######### Tensorflow / Keras ######### 
-# region ######### NN Model ######### 
+# region ######### Model ######### 
 model = tf.keras.Sequential()
-model.add(tf.keras.Input(shape=(len(cfg.variables),), name="inputLayer"))
-model.add(tf.keras.layers.Dense(32, activation=tf.nn.relu, input_shape=(len(cfg.variables),), name="dense_1"))
-model.add(tf.keras.layers.Dense(16, activation=tf.nn.relu, input_shape=(len(cfg.variables),), name="dense_2"))
+model.add(tf.keras.Input(shape=(len(cfg.variables),), name="input"))
+model.add(tf.keras.layers.Dense(64, activation=tf.nn.relu, name="dense01"))
+model.add(tf.keras.layers.Dense(32, activation=tf.nn.relu, name="dense02"))
 model.add(tf.keras.layers.Dense(2, activation=tf.nn.softmax, name="predictions"))
-# endregion ######### NN Model ######### 
+# endregion ######### Model ######### 
 
 model.summary()
 loss_fn = tf.keras.losses.CategoricalCrossentropy(from_logits=True)
-model.compile(optimizer='adam', loss=loss_fn, metrics=['accuracy'])
+adamOptimizer = tf.keras.optimizers.Adam(lr=0.000001)
+model.compile(optimizer=adamOptimizer, loss=loss_fn, metrics=['accuracy'])
+
+nn_callbacks = [
+    tf.keras.callbacks.EarlyStopping(monitor = 'val_loss', patience = 5, verbose=1, min_delta=0.0005),
+    tf.keras.callbacks.ModelCheckpoint(filepath=path.join(cfg.outputPath, 'model.epoch-{epoch:02d}-val_loss-{val_loss:.4f}.h5'), monitor='val_loss', save_best_only=True, verbose=1, mode='auto')
+]
 
 # region ######### Training ######### 
 history = model.fit(
     inputs_train, 
     labels_train, 
-    batch_size=100,
-    epochs=5,
-    validation_data=(inputs_validation, labels_validation)
+    batch_size=32,
+    epochs=100,
+    validation_data=(inputs_validation, labels_validation),
+    callbacks=nn_callbacks
 )
 # endregion ######### Training ######### 
 
@@ -230,6 +242,31 @@ plt.clf()
 
 print("\n")
 print(history.history)
+
+# Plot accuracy of NN
+plt.plot(history.history['accuracy'])
+plt.plot(history.history['val_accuracy'])
+plt.title('model accuracy')
+plt.ylabel('accuracy')
+plt.xlabel('epoch')
+plt.legend(['train', 'test'], loc='upper left')
+plt.savefig(path.join(cfg.plotsOutputPath, "model_accuracy.png"))
+plt.clf()
+# Plot loss of NN
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.title('model loss')
+plt.ylabel('loss')
+plt.xlabel('epoch')
+plt.legend(['train', 'test'], loc='upper left')
+plt.savefig(path.join(cfg.plotsOutputPath, "model_loss.png"))
+plt.clf()
+
+
+# evaluate the model
+_, train_acc = model.evaluate(inputs_train, labels_train, verbose=1)
+_, test_acc = model.evaluate(inputs_test, labels_test, verbose=1)
+print('Train: %.3f, Test: %.3f' % (train_acc, test_acc))
 # endregion ######### Tensorflow / Keras ######### 
 
 print(bcolors.OKGREEN + bcolors.BOLD + "########## END PYTHON SCRIPT ############\n" + bcolors.ENDC)

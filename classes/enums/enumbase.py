@@ -1,4 +1,4 @@
-from enum import Enum, EnumMeta
+from enum import Enum, IntEnum, EnumMeta
 from numpy import zeros
 
 # Enables using the first value of an enum class to be the default value by imitating a default constructor: MyEnum()
@@ -81,3 +81,4 @@ class EnumBase(Enum, metaclass=DefaultEnumMeta):
         oneHotVector = zeros(len(self))
         oneHotVector[int(self)] = 1.0
         return oneHotVector
+

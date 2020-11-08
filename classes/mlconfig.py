@@ -8,6 +8,7 @@ class MLConfig():
         self.baseCephPath = ""
         self.datasetsBasePath = ""
         self.datasetsList = []
+        self.outputPath = ""
         self.plotsOutputPath = ""
         self.variables = []
         self.categories = []

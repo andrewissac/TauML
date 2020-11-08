@@ -1,5 +1,6 @@
 *.pyc
 *.png
 *.json
+*.h5
 sandbox.py
 test.txt
