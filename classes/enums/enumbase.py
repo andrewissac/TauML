@@ -15,22 +15,9 @@ class EnumVal(object):
         self.value = value
         self.displayname = displayname
 
-class EnumBase(Enum, metaclass=DefaultEnumMeta):
-    def __int__(self):
-        return int(self.value)
-
+class EnumBase(metaclass=DefaultEnumMeta):
     def __len__(self):
         return len(self.getAllMembers())
-
-    def __new__(cls, value):
-        obj = object.__new__(cls)
-        obj._value_ = value.value
-        obj._displayname_ = value.displayname
-        return obj
-
-    @property
-    def displayname(self):
-        return self._displayname_
 
     @classmethod
     def getAllMembers(cls):
@@ -43,10 +30,6 @@ class EnumBase(Enum, metaclass=DefaultEnumMeta):
     @classmethod
     def getAllNames(cls):
         return [m.name for m in cls]
-
-    @classmethod
-    def getAllDisplaynames(cls):
-        return [m.displayname for m in cls]
 
     @classmethod
     def oneHotVectorToEnum(cls, oneHotVector):
@@ -81,4 +64,28 @@ class EnumBase(Enum, metaclass=DefaultEnumMeta):
         oneHotVector = zeros(len(self))
         oneHotVector[int(self)] = 1.0
         return oneHotVector
+
+class FloatEnumBase(EnumBase, Enum):
+    def __int__(self):
+        return int(self.value)
+
+    def __new__(cls, value):
+        obj = object.__new__(cls)
+        obj._value_ = value.value
+        obj._displayname_ = value.displayname
+        return obj
+
+    @property
+    def displayname(self):
+        return self._displayname_
+
+    @classmethod
+    def getAllDisplaynames(cls):
+        return [m.displayname for m in cls]
+
+class IntEnumBase(EnumBase, IntEnum):
+    def __new__(cls, value):
+        obj = int.__new__(cls, value)
+        obj._value_ = value
+        return obj
 

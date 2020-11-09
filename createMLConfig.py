@@ -37,6 +37,7 @@ MLCONFIG.generateHistograms = True
 # large dataset
 MLCONFIG.datasetsBasePath = path.join(MLCONFIG.baseCephPath, 'mergedROOTFiles')
 MLCONFIG.outputPath = path.join(MLCONFIG.baseWorkPath, 'TauAnalyzer/ML/output_wholeDataset')
+
 from pathlib import Path
 Path(MLCONFIG.outputPath).mkdir(parents=True, exist_ok=True)
 MLCONFIG.plotsOutputPath = path.join(MLCONFIG.outputPath, "plots")
