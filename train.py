@@ -16,6 +16,10 @@ from classes.enums.category import Category
 from classes.enums.tbranches import TBranches
 from utils.bashcolors import bcolors
 
+parser = argparse.ArgumentParser()
+parser.add_argument("-cfg", "--mlconfigfile", required=True, type=str)
+args = parser.parse_args()
+# USAGE: python3 train.py -cfg output_smallDataset_2020_.../cfg.json
 
 # region ######### Methods ######### 
 def rootTTree2numpy(rootFilePath):
@@ -149,7 +153,7 @@ def getCategorySliceIndicesFromSorted1DArray(sorted1DArray, categoryList):
 print("\n" + bcolors.OKGREEN + bcolors.BOLD + "########## BEGIN PYTHON SCRIPT ############" + bcolors.ENDC)
 # region ######### Get dataset from root files with uproot4 ######### 
 # TODO: pass config file as argument to train.py
-cfg = MLConfig.loadFromJsonfile('output_smallDataset/cfg.json')
+cfg = MLConfig.loadFromJsonfile(args.mlconfigfile)
 
 inputs, labels = buildDataset(cfg)
 from sklearn.model_selection import train_test_split
@@ -171,12 +175,18 @@ model = cfg.mlparams.buildSequentialKerasModel()
 # endregion ######### Model ######### 
 
 model.summary()
-loss_fn = cfg.mlparams.lossfunction
-adamOptimizer = cfg.mlparams.optimizer
-model.compile(optimizer=adamOptimizer, loss=loss_fn, metrics=['accuracy'])
+model.compile(optimizer=cfg.mlparams.optimizer, loss=cfg.mlparams.lossfunction, metrics=['accuracy'])
 
 # TODO: Generate new folder for models, PARENT FOLDER WITH DATE AND TIME
-nn_callbacks = cfg.mlparams.nn_callbacks
+ES = cfg.mlparams.earlystopping
+MC = cfg.mlparams.modelcheckpoint
+# cant directly load earlystopping/modelcheckpoint due to unpickle problems of functions like self.monitor_op(...)
+nn_callbacks = [
+    tf.keras.callbacks.EarlyStopping(monitor=ES.monitor, patience=ES.patience, verbose=ES.verbose, min_delta=ES.min_delta),
+    tf.keras.callbacks.ModelCheckpoint(filepath=path.join(cfg.outputPath, MC.filepath), monitor=MC.monitor, save_best_only=MC.save_best_only, verbose=MC.verbose)
+]
+
+
 
 # region ######### Training ######### 
 history = model.fit(
@@ -188,8 +198,6 @@ history = model.fit(
     callbacks=nn_callbacks
 )
 # endregion ######### Training ######### 
-
-
 
 # NN output plot
 predictions = model.predict(inputs_test)

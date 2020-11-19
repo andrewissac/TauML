@@ -18,11 +18,8 @@ Params.batchsize = 32
 Params.epochs = 100
 Params.lossfunction = tf.keras.losses.CategoricalCrossentropy(from_logits=True)
 Params.optimizer = tf.keras.optimizers.Adam(lr=0.000001)
-Params.nn_callbacks = [
-    tf.keras.callbacks.EarlyStopping(monitor = 'val_loss', patience = 5, verbose=1, min_delta=0.0005),
-    tf.keras.callbacks.ModelCheckpoint(filepath='bestmodel.h5', monitor='val_loss', save_best_only=True, verbose=1, mode='auto')
-]
-
+Params.earlystopping = tf.keras.callbacks.EarlyStopping(monitor = 'val_loss', patience = 5, verbose=1, min_delta=0.0005)
+Params.modelcheckpoint = tf.keras.callbacks.ModelCheckpoint(filepath='bestmodel.h5', monitor='val_loss', save_best_only=True, verbose=1)
 
 paramsOutputFileName = 'mlparams0001.json'
 paramsOutputPath = '/work/aissac/TauAnalyzer/ML/parametersets'
