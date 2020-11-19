@@ -13,5 +13,7 @@ class MLConfig(JsonSerializable, PPrintable):
         self.categories = []
         self.encodeLabels_OneHot = True
         self.generateHistograms = True
+        self.mlparametersetPath = ""
+        self.mlparameterset = None
 
 

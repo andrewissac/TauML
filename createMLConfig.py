@@ -1,4 +1,5 @@
 import classes.mlconfig as cfg
+from classes.mlparameters import MLParameterset
 from classes.enums.category import Category
 from classes.enums.tbranches import TBranches
 from os import path
@@ -20,7 +21,7 @@ MLCONFIG.generateHistograms = True
 
 
 
-# small test dataset
+# # small test dataset
 # MLCONFIG.datasetsBasePath = path.join(MLCONFIG.baseWorkPath, 'TestRootFiles')
 # MLCONFIG.outputPath = path.join(MLCONFIG.baseWorkPath, 'TauAnalyzer/ML/output_smallDataset')
 # from pathlib import Path
@@ -52,5 +53,8 @@ MLCONFIG.datasetsList = [
         path.join(MLCONFIG.datasetsBasePath, 'output__WJetsToLNu_TuneCP5_13TeV-madgraphMLM-pythia8_RunIIFall17MiniAODv2-PU2017_12Apr2018_94X_mc2017_realistic_v14-v3_MINIAODSIM')
         ]) 
     ]
+
+MLCONFIG.mlparametersetPath = '/work/aissac/TauAnalyzer/ML/parametersets/mlparams0001.json'
+MLCONFIG.mlparameterset = MLParameterset.loadFromJsonfile(MLCONFIG.mlparametersetPath)
 MLCONFIG.saveToJsonfile(MLCONFIG.outputPath, 'cfg.json')
 

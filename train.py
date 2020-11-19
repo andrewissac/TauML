@@ -167,6 +167,7 @@ print(labels_test.shape)
 
 # region ######### Tensorflow / Keras ######### 
 # region ######### Model ######### 
+# TODO: LOAD PARAMETERS FROM JSON AND BUILD AND SETUP MODEL
 model = tf.keras.Sequential()
 model.add(tf.keras.Input(shape=(len(cfg.variables),), name="input"))
 model.add(tf.keras.layers.Dense(64, activation=tf.nn.relu, name="dense01"))
@@ -179,6 +180,7 @@ loss_fn = tf.keras.losses.CategoricalCrossentropy(from_logits=True)
 adamOptimizer = tf.keras.optimizers.Adam(lr=0.000001)
 model.compile(optimizer=adamOptimizer, loss=loss_fn, metrics=['accuracy'])
 
+# TODO: Generate new folder for models, PARENT FOLDER WITH DATE AND TIME
 nn_callbacks = [
     tf.keras.callbacks.EarlyStopping(monitor = 'val_loss', patience = 5, verbose=1, min_delta=0.0005),
     tf.keras.callbacks.ModelCheckpoint(filepath=path.join(cfg.outputPath, 'model.epoch-{epoch:02d}-val_loss-{val_loss:.4f}.h5'), monitor='val_loss', save_best_only=True, verbose=1, mode='auto')
