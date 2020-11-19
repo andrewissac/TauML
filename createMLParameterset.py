@@ -1,5 +1,6 @@
 from classes.mlparameters import MLParameterset
 from os import path
+from pathlib import Path
 import tensorflow as tf
 
 Params = MLParameterset()
@@ -22,4 +23,17 @@ Params.nn_callbacks = [
     tf.keras.callbacks.ModelCheckpoint(filepath='bestmodel.h5', monitor='val_loss', save_best_only=True, verbose=1, mode='auto')
 ]
 
-Params.saveToJsonfile('/work/aissac/TauAnalyzer/ML/parametersets', 'mlparams0001.json')
+
+paramsOutputFileName = 'mlparams0001.json'
+paramsOutputPath = '/work/aissac/TauAnalyzer/ML/parametersets'
+paramsFile = Path(path.join(paramsOutputPath, paramsOutputFileName))
+
+if paramsFile.is_file():
+    userInput = input('MLParameterset file already exists! Do you want to overwrite the config file? (y/n)\n')
+    userInput = userInput.lower()
+    if userInput == 'y':
+        Params.saveToJsonfile(paramsOutputPath, paramsOutputFileName)
+        print("MLParameterset file overwritten.")
+    else:
+        print('MLParameterset file was not overwritten.')
+        pass

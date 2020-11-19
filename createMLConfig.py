@@ -55,6 +55,18 @@ MLCONFIG.datasetsList = [
     ]
 
 MLCONFIG.mlparametersetPath = '/work/aissac/TauAnalyzer/ML/parametersets/mlparams0001.json'
-MLCONFIG.mlparameterset = MLParameterset.loadFromJsonfile(MLCONFIG.mlparametersetPath)
-MLCONFIG.saveToJsonfile(MLCONFIG.outputPath, 'cfg.json')
+MLCONFIG.mlparams = MLParameterset.loadFromJsonfile(MLCONFIG.mlparametersetPath)
+
+
+cfgOutputFileName = 'cfg.json'
+cfgFile = Path(path.join(MLCONFIG.outputPath, cfgOutputFileName))
+if cfgFile.is_file():
+    userInput = input('Config file already exists! Do you want to overwrite the config file? (y/n)\n')
+    userInput = userInput.lower()
+    if userInput == 'y':
+        MLCONFIG.saveToJsonfile(MLCONFIG.outputPath, cfgOutputFileName)
+        print("Config file overwritten.")
+    else:
+        print('Config file was not overwritten.')
+        pass
 
