@@ -16,16 +16,33 @@ from classes.enums.category import Category
 from classes.enums.tbranches import TBranches
 from utils.bashcolors import bcolors
 
+# USAGE: python3 train.py -cfg output_smallDataset_2020_.../cfg.json
 parser = argparse.ArgumentParser()
 parser.add_argument("-cfg", "--mlconfigfile", required=True, type=str)
 args = parser.parse_args()
-# USAGE: python3 train.py -cfg output_smallDataset_2020_.../cfg.json
 
 # region ######### Methods ######### 
 def rootTTree2numpy(rootFilePath):
     f = uproot4.open(rootFilePath)
     ttree = f['tauEDAnalyzer']['Events'] # TTree name: 'Events'
     return ttree.arrays(library="np")
+
+def getTotalSampleCount(cfg: MLConfig):
+    if not isinstance(cfg, MLConfig):
+        raise TypeError
+
+    branchNames = [branch.name for branch in cfg.variables]
+    count = 0
+
+    for category, datasets in cfg.datasetsList: # category is the key and rootFiles is the value
+        for datasetPath in datasets:
+            rootFiles = [f for f in glob.glob(datasetPath + "/*.root", recursive=False)]
+            for rootFile in rootFiles:
+                tree = rootTTree2numpy(rootFile)
+                count += len(tree[branchNames[0]])
+    return count
+
+
 
 def buildDataset(cfg: MLConfig):
     if not isinstance(cfg, MLConfig):
@@ -35,7 +52,7 @@ def buildDataset(cfg: MLConfig):
     labels_ = []
     branchNames = [branch.name for branch in cfg.variables]
 
-    for category, datasets in cfg.datasetsList: # category is the key and rootFiles is the value
+    for category, datasets in cfg.datasetsList:
         for datasetPath in datasets:
             rootFiles = [f for f in glob.glob(datasetPath + "/*.root", recursive=False)]
             for rootFile in rootFiles:
@@ -43,7 +60,7 @@ def buildDataset(cfg: MLConfig):
                 tree = rootTTree2numpy(rootFile)
                 entryCount = tree[branchNames[0]].shape[0]
                 # ml_variable.name is the branch name of the TTree. Each branch has one float variable e.g. Tau_pt
-                inputs_.append(np.vstack([np.array(tree[branch], dtype=np.float32) for branch in branchNames]).T)
+                inputs_.append(np.array([np.array(tree[branch], dtype=np.float32) for branch in branchNames]).T)
                 labels_.append(np.full((entryCount,), category.value, dtype=np.float32))
 
     # Stack all inputs_ vertically
@@ -82,6 +99,9 @@ def buildDataset(cfg: MLConfig):
 
     if(cfg.encodeLabels_OneHot):
         labels_ = tf.keras.utils.to_categorical(labels_)
+    print(labels_.shape)
+    print(labels_[0])
+    print(labels_[85000])
 
     # print(inputs_[:,:1].min()) # shows min Tau_pt
     # print(inputs_[:,:1].max()) # shows max Tau_pt
@@ -152,123 +172,167 @@ def getCategorySliceIndicesFromSorted1DArray(sorted1DArray, categoryList):
 
 print("\n" + bcolors.OKGREEN + bcolors.BOLD + "########## BEGIN PYTHON SCRIPT ############" + bcolors.ENDC)
 # region ######### Get dataset from root files with uproot4 ######### 
-# TODO: pass config file as argument to train.py
 cfg = MLConfig.loadFromJsonfile(args.mlconfigfile)
 
-inputs, labels = buildDataset(cfg)
-from sklearn.model_selection import train_test_split
-inputs_train, inputs_testAndvalidation, labels_train, labels_testAndvalidation = train_test_split(inputs, labels, test_size=0.3, random_state=0)
-del inputs, labels
-inputs_validation, inputs_test, labels_validation, labels_test = train_test_split(inputs_testAndvalidation, labels_testAndvalidation, test_size=0.5, random_state=0)
-print(inputs_train.shape)
-print(labels_train.shape)
-print(inputs_validation.shape)
-print(labels_validation.shape)
-print(inputs_test.shape)
-print(labels_test.shape)
-# endregion ######### Get dataset from root files with uproot4 ######### 
+totalSampleCount = getTotalSampleCount(cfg)
+
+def dataGenerator(cfg: MLConfig):
+    from copy import deepcopy
+    filedic = {} # contains list of files per category which will NOT be popped
+    queue = {} # contains list of files per category which can be popped
+    bufferEvents = {} 
+    bufferLabels = {} 
+    branchNames = TBranches.getAllNames() # need names to get tau_pt, tau_eta etc. from TTree
+    eventsPerClassPerBatch = cfg.mlparams.eventsPerClassPerBatch
+
+    # initialize queue by getting all rootfile names and their corresponding category
+    for category, datasets in cfg.datasetsList:
+        for datasetPath in datasets:
+            rootFiles = [f for f in glob.glob(datasetPath + "/*.root", recursive=False)]
+            filedic[category] = rootFiles
+            bufferEvents[category] = []
+            bufferLabels[category] = []
+    queue = deepcopy(filedic)
+
+    while True:
+        events = []
+        labels = []
+        for category in cfg.categories:
+            # fill buffer if buffer doesn't have enough events for a batch
+            if len(bufferEvents[category]) < eventsPerClassPerBatch:
+                if len(queue[category]) == 0:
+                    # refill queue with same dataset if there are no more files to get (oversampling)
+                    queue[category] = deepcopy(filedic[category])
+                tree = rootTTree2numpy(queue[category].pop())
+                eventCount = len(tree[branchNames[0]])
+                # fill buffers from TTree
+                bufferEvents[category].extend(np.array([np.array(tree[branch], dtype=np.float32) for branch in branchNames]).T.tolist())
+                bufferLabels[category].extend(np.full((eventCount,), category.value, dtype=np.float32).tolist())
+            # get batches
+            events.extend(bufferEvents[category][-eventsPerClassPerBatch:])
+            labels.extend(bufferLabels[category][-eventsPerClassPerBatch:])
+            # delete batches from buffer
+            del bufferEvents[category][-eventsPerClassPerBatch:]
+            del bufferLabels[category][-eventsPerClassPerBatch:]
+
+        events = np.array(events, dtype=np.float32)
+        labels = tf.keras.utils.to_categorical(np.array(labels, dtype=np.float32))
+        yield events, labels
+
+batchSize = cfg.mlparams.eventsPerClassPerBatch * len(cfg.categories)
+
+# cfg.generateHistograms = False
+#inputs, labels = buildDataset(cfg)
+# from sklearn.model_selection import train_test_split
+# inputs_train, inputs_testAndvalidation, labels_train, labels_testAndvalidation = train_test_split(inputs, labels, test_size=0.3, random_state=0)
+# del inputs, labels
+# inputs_validation, inputs_test, labels_validation, labels_test = train_test_split(inputs_testAndvalidation, labels_testAndvalidation, test_size=0.5, random_state=0)
+# print(inputs_train.shape)
+# print(labels_train.shape)
+# print(inputs_validation.shape)
+# print(labels_validation.shape)
+# print(inputs_test.shape)
+# print(labels_test.shape)
+# # endregion ######### Get dataset from root files with uproot4 ######### 
 
 
-# region ######### Tensorflow / Keras ######### 
-# region ######### Model ######### 
-model = cfg.mlparams.buildSequentialKerasModel()
-# endregion ######### Model ######### 
+# # region ######### Tensorflow / Keras ######### 
+# # region ######### Model ######### 
+# model = cfg.mlparams.buildSequentialKerasModel()
+# # endregion ######### Model ######### 
 
-model.summary()
-model.compile(optimizer=cfg.mlparams.optimizer, loss=cfg.mlparams.lossfunction, metrics=['accuracy'])
+# model.summary()
+# model.compile(optimizer=cfg.mlparams.optimizer, loss=cfg.mlparams.lossfunction, metrics=['accuracy'])
 
-# TODO: Generate new folder for models, PARENT FOLDER WITH DATE AND TIME
-ES = cfg.mlparams.earlystopping
-MC = cfg.mlparams.modelcheckpoint
-# cant directly load earlystopping/modelcheckpoint due to unpickle problems of functions like self.monitor_op(...)
-nn_callbacks = [
-    tf.keras.callbacks.EarlyStopping(monitor=ES.monitor, patience=ES.patience, verbose=ES.verbose, min_delta=ES.min_delta),
-    tf.keras.callbacks.ModelCheckpoint(filepath=path.join(cfg.outputPath, MC.filepath), monitor=MC.monitor, save_best_only=MC.save_best_only, verbose=MC.verbose)
-]
+# ES = cfg.mlparams.earlystopping
+# MC = cfg.mlparams.modelcheckpoint
+# # cant directly load earlystopping/modelcheckpoint due to unpickle problems of functions like self.monitor_op(...)
+# nn_callbacks = [
+#     tf.keras.callbacks.EarlyStopping(monitor=ES.monitor, patience=ES.patience, verbose=ES.verbose, min_delta=ES.min_delta),
+#     tf.keras.callbacks.ModelCheckpoint(filepath=path.join(cfg.outputPath, MC.filepath), monitor=MC.monitor, save_best_only=MC.save_best_only, verbose=MC.verbose)
+# ]
 
+# # region ######### Training ######### 
+# history = model.fit(
+#     inputs_train, 
+#     labels_train, 
+#     batch_size=cfg.mlparams.batchsize,
+#     epochs=cfg.mlparams.epochs,
+#     validation_data=(inputs_validation, labels_validation),
+#     callbacks=nn_callbacks
+# )
+# # endregion ######### Training ######### 
 
+# # NN output plot
+# predictions = model.predict(inputs_test)
+# #print(predictions)
 
-# region ######### Training ######### 
-history = model.fit(
-    inputs_train, 
-    labels_train, 
-    batch_size=cfg.mlparams.batchsize,
-    epochs=cfg.mlparams.epochs,
-    validation_data=(inputs_validation, labels_validation),
-    callbacks=nn_callbacks
-)
-# endregion ######### Training ######### 
+# if(cfg.encodeLabels_OneHot):
+#     # TODO: check which order is actually signal (genuineTau) and which are background (fakeTau)
+#     genuineTau_decisions = predictions[:,0]
+#     fakeTau_decisions = predictions[:,1]
 
-# NN output plot
-predictions = model.predict(inputs_test)
-#print(predictions)
+#     plt.hist(fakeTau_decisions, color='red', label='fake', 
+#             histtype='step', # lineplot that's unfilled
+#             density=True ) # normalize to form a probability density
+#     plt.hist(genuineTau_decisions, color='blue', label='genuine', 
+#             histtype='step', # lineplot that's unfilled
+#             density=True, # normalize to form a probability density
+#             linestyle='--' )
+#     plt.xlabel('Neural Network output') # add x-axis label
+#     plt.ylabel('Arbitrary units') # add y-axis label
+#     plt.legend() # add legend
+#     plt.savefig(path.join(cfg.plotsOutputPath, "NN_output.png"))
+#     plt.clf()
 
-if(cfg.encodeLabels_OneHot):
-    # TODO: check which order is actually signal (genuineTau) and which are background (fakeTau)
-    genuineTau_decisions = predictions[:,0]
-    fakeTau_decisions = predictions[:,1]
+# from sklearn.metrics import roc_curve, auc
+# # most tutorials slice the prediction for whatever reason with [:,1] but why?
+# # predictions_ = predictions[:, 1]
 
-    plt.hist(fakeTau_decisions, color='red', label='fake', 
-            histtype='step', # lineplot that's unfilled
-            density=True ) # normalize to form a probability density
-    plt.hist(genuineTau_decisions, color='blue', label='genuine', 
-            histtype='step', # lineplot that's unfilled
-            density=True, # normalize to form a probability density
-            linestyle='--' )
-    plt.xlabel('Neural Network output') # add x-axis label
-    plt.ylabel('Arbitrary units') # add y-axis label
-    plt.legend() # add legend
-    plt.savefig(path.join(cfg.plotsOutputPath, "NN_output.png"))
-    plt.clf()
+# fpr, tpr, _ = roc_curve(labels_test.argmax(axis=1), predictions.argmax(axis=1))
 
-from sklearn.metrics import roc_curve, auc
-# most tutorials slice the prediction for whatever reason with [:,1] but why?
-# predictions_ = predictions[:, 1]
+# roc_auc = auc(fpr, tpr) # area under curve (AUC), ROC = Receiver operating characteristic
+# plt.plot(fpr, tpr, label='ROC (area = %0.2f)'%(roc_auc)) # plot test ROC curve
+# plt.plot([0, 1], # x from 0 to 1
+#          [0, 1], # y from 0 to 1
+#          '--', # dashed line
+#          color='grey', label='Luck')
 
-fpr, tpr, _ = roc_curve(labels_test.argmax(axis=1), predictions.argmax(axis=1))
+# plt.xlabel('False Positive Rate') # x-axis label
+# plt.ylabel('True Positive Rate') # y-axis label
+# plt.title('Receiver operating characteristic (ROC) curve') # title
+# plt.legend() # add legend
+# plt.grid() # add grid
+# plt.savefig(path.join(cfg.plotsOutputPath, "ROC_Curve.png"))
+# plt.clf()
 
-roc_auc = auc(fpr, tpr) # area under curve (AUC), ROC = Receiver operating characteristic
-plt.plot(fpr, tpr, label='ROC (area = %0.2f)'%(roc_auc)) # plot test ROC curve
-plt.plot([0, 1], # x from 0 to 1
-         [0, 1], # y from 0 to 1
-         '--', # dashed line
-         color='grey', label='Luck')
+# print("\n")
+# print(history.history)
 
-plt.xlabel('False Positive Rate') # x-axis label
-plt.ylabel('True Positive Rate') # y-axis label
-plt.title('Receiver operating characteristic (ROC) curve') # title
-plt.legend() # add legend
-plt.grid() # add grid
-plt.savefig(path.join(cfg.plotsOutputPath, "ROC_Curve.png"))
-plt.clf()
-
-print("\n")
-print(history.history)
-
-# Plot accuracy of NN
-plt.plot(history.history['accuracy'])
-plt.plot(history.history['val_accuracy'])
-plt.title('model accuracy')
-plt.ylabel('accuracy')
-plt.xlabel('epoch')
-plt.legend(['train', 'test'], loc='upper left')
-plt.savefig(path.join(cfg.plotsOutputPath, "model_accuracy.png"))
-plt.clf()
-# Plot loss of NN
-plt.plot(history.history['loss'])
-plt.plot(history.history['val_loss'])
-plt.title('model loss')
-plt.ylabel('loss')
-plt.xlabel('epoch')
-plt.legend(['train', 'test'], loc='upper left')
-plt.savefig(path.join(cfg.plotsOutputPath, "model_loss.png"))
-plt.clf()
+# # Plot accuracy of NN
+# plt.plot(history.history['accuracy'])
+# plt.plot(history.history['val_accuracy'])
+# plt.title('model accuracy')
+# plt.ylabel('accuracy')
+# plt.xlabel('epoch')
+# plt.legend(['train', 'test'], loc='upper left')
+# plt.savefig(path.join(cfg.plotsOutputPath, "model_accuracy.png"))
+# plt.clf()
+# # Plot loss of NN
+# plt.plot(history.history['loss'])
+# plt.plot(history.history['val_loss'])
+# plt.title('model loss')
+# plt.ylabel('loss')
+# plt.xlabel('epoch')
+# plt.legend(['train', 'test'], loc='upper left')
+# plt.savefig(path.join(cfg.plotsOutputPath, "model_loss.png"))
+# plt.clf()
 
 
-# evaluate the model
-_, train_acc = model.evaluate(inputs_train, labels_train, verbose=1)
-_, test_acc = model.evaluate(inputs_test, labels_test, verbose=1)
-print('Train: %.3f, Test: %.3f' % (train_acc, test_acc))
-# endregion ######### Tensorflow / Keras ######### 
+# # evaluate the model
+# _, train_acc = model.evaluate(inputs_train, labels_train, verbose=1)
+# _, test_acc = model.evaluate(inputs_test, labels_test, verbose=1)
+# print('Train: %.3f, Test: %.3f' % (train_acc, test_acc))
+# # endregion ######### Tensorflow / Keras ######### 
 
-print(bcolors.OKGREEN + bcolors.BOLD + "########## END PYTHON SCRIPT ############\n" + bcolors.ENDC)
+# print(bcolors.OKGREEN + bcolors.BOLD + "########## END PYTHON SCRIPT ############\n" + bcolors.ENDC)

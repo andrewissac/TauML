@@ -1,5 +1,4 @@
 from utils.json_util import JsonSerializable
-from utils.pprint_util import PPrintable
 
 class MLParameterset(JsonSerializable):
     def __init__(self):
@@ -7,8 +6,7 @@ class MLParameterset(JsonSerializable):
         self.inputlayer = {}
         self.hiddenlayers = {} 
         self.outputlayer = {}
-        self.batchsize = 16
-        self.epochs = 10
+        self.eventsPerClassPerBatch = 50
         self.lossfunction = None
         self.optimizer = None
         self.earlystopping = None
@@ -31,4 +29,7 @@ class MLParameterset(JsonSerializable):
         return model
 
     def __str__(self): # not inheriting from PPrintable, because tf functions would not print with all properties but with address
+        return self.toJsonString()
+
+    def __repr__(self): # not inheriting from PPrintable, because tf functions would not print with all properties but with address
         return self.toJsonString()
