@@ -14,7 +14,9 @@ from sklearn.utils import shuffle
 from classes.mlconfig import MLConfig
 from classes.enums.category import Category
 from classes.enums.tbranches import TBranches
+from classes.enums.datamode import Datamode
 from utils.bashcolors import bcolors
+from utils.rootfile_util import rootTTree2numpy
 
 # USAGE: python3 train.py -cfg output_smallDataset_2020_.../cfg.json
 parser = argparse.ArgumentParser()
@@ -22,28 +24,6 @@ parser.add_argument("-cfg", "--mlconfigfile", required=True, type=str)
 args = parser.parse_args()
 
 # region ######### Methods ######### 
-def rootTTree2numpy(rootFilePath):
-    f = uproot4.open(rootFilePath)
-    ttree = f['tauEDAnalyzer']['Events'] # TTree name: 'Events'
-    return ttree.arrays(library="np")
-
-def getTotalSampleCount(cfg: MLConfig):
-    if not isinstance(cfg, MLConfig):
-        raise TypeError
-
-    branchNames = [branch.name for branch in cfg.variables]
-    count = 0
-
-    for category, datasets in cfg.datasetsList: # category is the key and rootFiles is the value
-        for datasetPath in datasets:
-            rootFiles = [f for f in glob.glob(datasetPath + "/*.root", recursive=False)]
-            for rootFile in rootFiles:
-                tree = rootTTree2numpy(rootFile)
-                count += len(tree[branchNames[0]])
-    return count
-
-
-
 def buildDataset(cfg: MLConfig):
     if not isinstance(cfg, MLConfig):
         raise TypeError
@@ -174,21 +154,27 @@ print("\n" + bcolors.OKGREEN + bcolors.BOLD + "########## BEGIN PYTHON SCRIPT ##
 # region ######### Get dataset from root files with uproot4 ######### 
 cfg = MLConfig.loadFromJsonfile(args.mlconfigfile)
 
-totalSampleCount = getTotalSampleCount(cfg)
+# getSampleCount(cfg, Datamode.train)
+# getSampleCount(cfg, Datamode.valid)
+# getSampleCount(cfg, Datamode.test)
+#  246 von 1533 files cotain error (are empty)
 
-def dataGenerator(cfg: MLConfig):
+def dataGenerator(cfg: MLConfig, datamode: Datamode):
     from copy import deepcopy
     filedic = {} # contains list of files per category which will NOT be popped
     queue = {} # contains list of files per category which can be popped
     bufferEvents = {} 
     bufferLabels = {} 
     branchNames = TBranches.getAllNames() # need names to get tau_pt, tau_eta etc. from TTree
-    eventsPerClassPerBatch = cfg.mlparams.eventsPerClassPerBatch
+    if datamode == Datamode.train:
+        eventsPerClassPerBatch = cfg.mlparams.eventsPerClassPerBatch
+    elif datamode == Datamode.valid:
+        eventsPerClassPerBatch = cfg.mlparams.eventsPerClassPerBatch
 
     # initialize queue by getting all rootfile names and their corresponding category
     for category, datasets in cfg.datasetsList:
         for datasetPath in datasets:
-            rootFiles = [f for f in glob.glob(datasetPath + "/*.root", recursive=False)]
+            rootFiles = [f for f in glob.glob(path.join(datasetPath, datamode.name, "*.root"), recursive=False)]
             filedic[category] = rootFiles
             bufferEvents[category] = []
             bufferLabels[category] = []
@@ -198,11 +184,13 @@ def dataGenerator(cfg: MLConfig):
         events = []
         labels = []
         for category in cfg.categories:
+            # TODO: IF DATAMODE == DATAMODE.VALID -> OVERSAMPLE USING MAX EVENTCOUNT VALID DATASET BY CFG
             # fill buffer if buffer doesn't have enough events for a batch
             if len(bufferEvents[category]) < eventsPerClassPerBatch:
                 if len(queue[category]) == 0:
                     # refill queue with same dataset if there are no more files to get (oversampling)
                     queue[category] = deepcopy(filedic[category])
+                    
                 tree = rootTTree2numpy(queue[category].pop())
                 eventCount = len(tree[branchNames[0]])
                 # fill buffers from TTree
@@ -222,46 +210,35 @@ def dataGenerator(cfg: MLConfig):
 batchSize = cfg.mlparams.eventsPerClassPerBatch * len(cfg.categories)
 
 # cfg.generateHistograms = False
-#inputs, labels = buildDataset(cfg)
+# inputs, labels = buildDataset(cfg)
 # from sklearn.model_selection import train_test_split
-# inputs_train, inputs_testAndvalidation, labels_train, labels_testAndvalidation = train_test_split(inputs, labels, test_size=0.3, random_state=0)
-# del inputs, labels
-# inputs_validation, inputs_test, labels_validation, labels_test = train_test_split(inputs_testAndvalidation, labels_testAndvalidation, test_size=0.5, random_state=0)
-# print(inputs_train.shape)
-# print(labels_train.shape)
-# print(inputs_validation.shape)
-# print(labels_validation.shape)
-# print(inputs_test.shape)
-# print(labels_test.shape)
-# # endregion ######### Get dataset from root files with uproot4 ######### 
 
+# region ######### Tensorflow / Keras ######### 
+# region ######### Model ######### 
+model = cfg.mlparams.buildSequentialKerasModel()
+# endregion ######### Model ######### 
 
-# # region ######### Tensorflow / Keras ######### 
-# # region ######### Model ######### 
-# model = cfg.mlparams.buildSequentialKerasModel()
-# # endregion ######### Model ######### 
+model.summary()
+model.compile(optimizer=cfg.mlparams.optimizer, loss=cfg.mlparams.lossfunction, metrics=['accuracy'])
 
-# model.summary()
-# model.compile(optimizer=cfg.mlparams.optimizer, loss=cfg.mlparams.lossfunction, metrics=['accuracy'])
+ES = cfg.mlparams.earlystopping
+MC = cfg.mlparams.modelcheckpoint
+# cant directly load earlystopping/modelcheckpoint due to unpickle problems of functions like self.monitor_op(...)
+nn_callbacks = [
+    tf.keras.callbacks.EarlyStopping(monitor=ES.monitor, patience=ES.patience, verbose=ES.verbose, min_delta=ES.min_delta),
+    tf.keras.callbacks.ModelCheckpoint(filepath=path.join(cfg.outputPath, MC.filepath), monitor=MC.monitor, save_best_only=MC.save_best_only, verbose=MC.verbose)
+]
 
-# ES = cfg.mlparams.earlystopping
-# MC = cfg.mlparams.modelcheckpoint
-# # cant directly load earlystopping/modelcheckpoint due to unpickle problems of functions like self.monitor_op(...)
-# nn_callbacks = [
-#     tf.keras.callbacks.EarlyStopping(monitor=ES.monitor, patience=ES.patience, verbose=ES.verbose, min_delta=ES.min_delta),
-#     tf.keras.callbacks.ModelCheckpoint(filepath=path.join(cfg.outputPath, MC.filepath), monitor=MC.monitor, save_best_only=MC.save_best_only, verbose=MC.verbose)
-# ]
-
-# # region ######### Training ######### 
-# history = model.fit(
-#     inputs_train, 
-#     labels_train, 
-#     batch_size=cfg.mlparams.batchsize,
-#     epochs=cfg.mlparams.epochs,
-#     validation_data=(inputs_validation, labels_validation),
-#     callbacks=nn_callbacks
-# )
-# # endregion ######### Training ######### 
+# region ######### Training ######### 
+history = model.fit(
+    x = dataGenerator(cfg, Datamode.train),
+    validation_data = dataGenerator(cfg, Datamode.valid),
+    steps_per_epoch = 1,
+    validation_steps = 1,
+    epochs = 200,
+    callbacks = nn_callbacks
+)
+# endregion ######### Training ######### 
 
 # # NN output plot
 # predictions = model.predict(inputs_test)
@@ -335,4 +312,4 @@ batchSize = cfg.mlparams.eventsPerClassPerBatch * len(cfg.categories)
 # print('Train: %.3f, Test: %.3f' % (train_acc, test_acc))
 # # endregion ######### Tensorflow / Keras ######### 
 
-# print(bcolors.OKGREEN + bcolors.BOLD + "########## END PYTHON SCRIPT ############\n" + bcolors.ENDC)
+print(bcolors.OKGREEN + bcolors.BOLD + "########## END PYTHON SCRIPT ############\n" + bcolors.ENDC)

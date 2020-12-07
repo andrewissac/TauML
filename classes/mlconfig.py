@@ -7,6 +7,7 @@ class MLConfig(JsonSerializable, PPrintable):
         self.baseCephPath = ""
         self.datasetsBasePath = ""
         self.datasetsList = []
+        self.datasetsInfoSummary = None
         self.outputPath = ""
         self.plotsOutputPath = ""
         self.variables = []

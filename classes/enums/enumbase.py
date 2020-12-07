@@ -21,7 +21,7 @@ class EnumBase(metaclass=DefaultEnumMeta):
 
     @classmethod
     def getAllMembers(cls):
-        return cls.__members__.items()
+        return [member for (value, member) in list(cls.__members__.items())]
     
     @classmethod
     def getAllValues(cls):
