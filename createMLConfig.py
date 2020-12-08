@@ -81,7 +81,7 @@ MLCONFIG.generateHistograms = True
 
 # region small test dataset
 # MLCONFIG.datasetsBasePath = path.join(MLCONFIG.baseWorkPath, 'TestRootFiles')
-# MLCONFIG.outputPath = path.join(MLCONFIG.baseWorkPath, 'TauAnalyzer/ML/output_largeDataset_{}'.format(datetimeStr))
+# MLCONFIG.outputPath = path.join(MLCONFIG.baseWorkPath, 'TauAnalyzer/ML/output_smallDataset_{}'.format(datetimeStr))
 # MLCONFIG.plotsOutputPath = path.join(MLCONFIG.outputPath, "plots")
 
 # MLCONFIG.plotsOutputPath = path.join(MLCONFIG.outputPath, "plots")
@@ -89,12 +89,11 @@ MLCONFIG.generateHistograms = True
 # Path(MLCONFIG.outputPath).mkdir(parents=True, exist_ok=True)
 # Path(MLCONFIG.plotsOutputPath).mkdir(parents=True, exist_ok=True)
 
-# couldn't use dictionary due to problems with pickling enums
+# # couldn't use dictionary due to problems with pickling enums
 # MLCONFIG.datasetsList = [
 #     (Category.GenuineTau, [path.join(MLCONFIG.datasetsBasePath, 'GenuineTau')]), 
 #     (Category.FakeTau, [path.join(MLCONFIG.datasetsBasePath, 'FakeTau')])
 #     ]
-# MLCONFIG.saveToJsonfile(MLCONFIG.outputPath, 'cfg.json')
 # endregion small test dataset
 
 # # region large test dataset
@@ -119,7 +118,7 @@ MLCONFIG.datasetsList = [
 # endregion large test dataset
 
 MLCONFIG.datasetsInfoSummary = getDatasetsInfoSummary(MLCONFIG) # get file-/eventcounts of datasets (can take several minutes)
-MLCONFIG.trainEventsPerClassPerBatch = 50
+MLCONFIG.trainEventsPerCategoryPerBatch = 50
 MLCONFIG.batchSize = int(MLCONFIG.trainEventsPerCategoryPerBatch * len(MLCONFIG.categories))
 # might need to change if datasets become too large!
 MLCONFIG.validEventsPerCategoryPerBatch = MLCONFIG.datasetsInfoSummary.categoryWithMaxEventCount['valid'] # this is a tuple ! (eventCount, CategoryName)

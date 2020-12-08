@@ -36,10 +36,8 @@ def buildDataset(cfg: MLConfig):
         for datasetPath in datasets:
             rootFiles = [f for f in glob.glob(datasetPath + "/*.root", recursive=False)]
             for rootFile in rootFiles:
-                #print(rootFile)
                 tree = rootTTree2numpy(rootFile)
                 entryCount = tree[branchNames[0]].shape[0]
-                # ml_variable.name is the branch name of the TTree. Each branch has one float variable e.g. Tau_pt
                 inputs_.append(np.array([np.array(tree[branch], dtype=np.float32) for branch in branchNames]).T)
                 labels_.append(np.full((entryCount,), category.value, dtype=np.float32))
 
@@ -227,11 +225,14 @@ nn_callbacks = [
     tf.keras.callbacks.ModelCheckpoint(filepath=path.join(cfg.outputPath, MC.filepath), monitor=MC.monitor, save_best_only=MC.save_best_only, verbose=MC.verbose)
 ]
 
+steps_per_epoch = int(cfg.datasetsInfoSummary.totalEventCount['train'] / cfg.batchSize)
+print("Steps per epoch: ", steps_per_epoch)
+
 # region ######### Training ######### 
 history = model.fit(
     x = dataGenerator(cfg, Datamode.train),
     validation_data = dataGenerator(cfg, Datamode.valid),
-    steps_per_epoch = 1,
+    steps_per_epoch= steps_per_epoch,
     validation_steps = cfg.validationSteps,
     epochs = 200,
     callbacks = nn_callbacks
