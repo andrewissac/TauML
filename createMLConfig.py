@@ -119,6 +119,11 @@ MLCONFIG.datasetsList = [
 # endregion large test dataset
 
 MLCONFIG.datasetsInfoSummary = getDatasetsInfoSummary(MLCONFIG) # get file-/eventcounts of datasets (can take several minutes)
+MLCONFIG.trainEventsPerClassPerBatch = 50
+MLCONFIG.batchSize = int(MLCONFIG.trainEventsPerCategoryPerBatch * len(MLCONFIG.categories))
+# might need to change if datasets become too large!
+MLCONFIG.validEventsPerCategoryPerBatch = MLCONFIG.datasetsInfoSummary.categoryWithMaxEventCount['valid'] # this is a tuple ! (eventCount, CategoryName)
+MLCONFIG.validationSteps = 1
 
 MLCONFIG.mlparametersetPath = '/work/aissac/TauAnalyzer/ML/parametersets/mlparams0002.json'
 MLCONFIG.mlparams = MLParameterset.loadFromJsonfile(MLCONFIG.mlparametersetPath)

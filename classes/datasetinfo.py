@@ -6,19 +6,15 @@ class DatasetInfo(JsonSerializable):
         self.category = category
         self.datasetPath = datasetPath
         self.rootfileInfos = rootfileInfos
-        
-        datamodes = Datamode.getAllMembers()
+        self.datamodes = Datamode.getAllMembers()
         self.fileCount = {'all' : sum(1 for x in rootfileInfos)}
-        for datamode in datamodes:
-            self.fileCount[datamode.name] = sum(1  for x in rootfileInfos if x.datamode == datamode)
-
         self.erroneousFileCount = {'all' : sum(1 for x in rootfileInfos if x.hadErrorOnOpening)}
-        for datamode in datamodes:
-            self.erroneousFileCount[datamode.name] = sum(1 for x in rootfileInfos if x.hadErrorOnOpening and x.datamode == datamode)
-
         self.eventCount = {'all' : sum(x.eventCount for x in rootfileInfos if not x.hadErrorOnOpening)}
-        for datamode in datamodes:
+        for datamode in self.datamodes:
+            self.fileCount[datamode.name] = sum(1  for x in rootfileInfos if x.datamode == datamode)
+            self.erroneousFileCount[datamode.name] = sum(1 for x in rootfileInfos if x.hadErrorOnOpening and x.datamode == datamode)
             self.eventCount[datamode.name] = sum(x.eventCount for x in rootfileInfos if not x.hadErrorOnOpening and x.datamode == datamode)
+
         # rather a hack to not include thousands of lines into json file
         # comment line below out if specific rootfile info is needed
         self.rootfileInfos = [] 
@@ -26,46 +22,52 @@ class DatasetInfo(JsonSerializable):
 class DatasetInfoSummary(JsonSerializable):
     def __init__(self, datasetInfoList):
         self.datasetInfoList = datasetInfoList
-        datamodes = Datamode.getAllMembers()
+        self.datamodes = Datamode.getAllMembers()
         self.totalFileCount = {'all' : sum(x.fileCount['all'] for x in datasetInfoList)}
-        for datamode in datamodes:
-            self.totalFileCount[datamode.name] = sum(x.fileCount[datamode.name] for x in datasetInfoList)
-
         self.totalErroneousFileCount = {'all' : sum(x.erroneousFileCount['all'] for x in datasetInfoList)}
-        for datamode in datamodes:
-            self.totalErroneousFileCount[datamode.name] = sum(x.erroneousFileCount[datamode.name] for x in datasetInfoList)
-
         self.totalEventCount = {'all' : sum(x.eventCount['all'] for x in datasetInfoList)}
-        for datamode in datamodes:
+        self.categoryEventCount = {}
+        self.categoryWithMaxEventCount = {}
+        self.categoryWithMinEventCount = {}
+        self.datasetWithMaxEventCount = {}
+        self.datasetWithMinEventCount = {}
+        for datamode in self.datamodes:
+            self.totalFileCount[datamode.name] = sum(x.fileCount[datamode.name] for x in datasetInfoList)
+            self.totalErroneousFileCount[datamode.name] = sum(x.erroneousFileCount[datamode.name] for x in datasetInfoList)
             self.totalEventCount[datamode.name] = sum(x.eventCount[datamode.name] for x in datasetInfoList)
+            self.categoryEventCount[datamode.name] = self.getCategoryEventCount(datamode.name)
+            self.categoryWithMaxEventCount[datamode.name] = self.getCategoryWithMinOrMaxEventCount(max, datamode.name)
+            self.categoryWithMinEventCount[datamode.name] = self.getCategoryWithMinOrMaxEventCount(min, datamode.name)
+            self.datasetWithMaxEventCount[datamode.name] = self.getDatasetWithMinOrMaxEventCount(max, datamode.name)
+            self.datasetWithMinEventCount[datamode.name] = self.getDatasetWithMinOrMaxEventCount(min, datamode.name)
 
-        self.maxEventCount = {}
-        for datamode in datamodes: # get event count from dataset with most events per datamode
-            self.maxEventCount[datamode.name] = (max(x.eventCount[datamode.name] for x in datasetInfoList), self.getDatasetWithMaxEventCount(datamode.name).datasetPath)
+    def getCategoryEventCount(self, modeName: str):
+        categoryEventCount = {}
+        for datasetinfo in self.datasetInfoList:
+            if not datasetinfo.category.name in categoryEventCount.keys():
+                categoryEventCount[datasetinfo.category.name] = datasetinfo.eventCount[modeName]
+            else:
+                categoryEventCount[datasetinfo.category.name] += datasetinfo.eventCount[modeName]
+        return categoryEventCount
 
-        self.minEventCount = {}
-        for datamode in datamodes: # get event count from dataset with least events per datamode
-            self.minEventCount[datamode.name] = (min(x.eventCount[datamode.name] for x in datasetInfoList), self.getDatasetWithMinEventCount(datamode.name).datasetPath)
+    def getCategoryWithMinOrMaxEventCount(self, minOrMaxFunc, modeName: str):
+        categoryEventCount = {}
+        for datasetinfo in self.datasetInfoList:
+            if not datasetinfo.category.name in categoryEventCount.keys():
+                categoryEventCount[datasetinfo.category.name] = datasetinfo.eventCount[modeName]
+            else:
+                categoryEventCount[datasetinfo.category.name] += datasetinfo.eventCount[modeName]
+        minOrMaxVal = minOrMaxFunc(categoryEventCount.values())
+        minOrMaxKey = next((k for k,v in categoryEventCount.items() if v == minOrMaxVal), None)
+        return (minOrMaxVal, minOrMaxKey)
 
-    def getDatasetWithMaxEventCount(self, mode):
+    def getDatasetWithMinOrMaxEventCount(self, minOrMaxFunc, modeName: str):
         '''
         very naive "search", this approach assumes eventCounts per Dataset are unique 
         (very little chance that they are not unique OR purposely built to be of exact same size)
         '''
-        maxEventCount = max(x.eventCount[mode] for x in self.datasetInfoList)
-        for datasetInfo in self.datasetInfoList:
-            if(maxEventCount == datasetInfo.eventCount[mode]):
-                return datasetInfo
-
-    def getDatasetWithMinEventCount(self, mode):
-        '''
-        very naive "search", this approach assumes eventCounts per Dataset are unique 
-        (very little chance that they are not unique OR purposely built to be of exact same size)
-        '''
-        minEventCount = min(x.eventCount[mode] for x in self.datasetInfoList)
-        for datasetInfo in self.datasetInfoList:
-            if(minEventCount == datasetInfo.eventCount[mode]):
-                return datasetInfo
+        minOrMaxEventCount = minOrMaxFunc(x.eventCount[modeName] for x in self.datasetInfoList)
+        return (minOrMaxEventCount, next((x.datasetPath for x in self.datasetInfoList if x.eventCount[modeName] == minOrMaxEventCount), None))
 
 
 class ROOTFileInfo(JsonSerializable):

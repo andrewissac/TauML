@@ -166,10 +166,6 @@ def dataGenerator(cfg: MLConfig, datamode: Datamode):
     bufferEvents = {} 
     bufferLabels = {} 
     branchNames = TBranches.getAllNames() # need names to get tau_pt, tau_eta etc. from TTree
-    if datamode == Datamode.train:
-        eventsPerClassPerBatch = cfg.mlparams.eventsPerClassPerBatch
-    elif datamode == Datamode.valid:
-        eventsPerClassPerBatch = cfg.mlparams.eventsPerClassPerBatch
 
     # initialize queue by getting all rootfile names and their corresponding category
     for category, datasets in cfg.datasetsList:
@@ -180,13 +176,17 @@ def dataGenerator(cfg: MLConfig, datamode: Datamode):
             bufferLabels[category] = []
     queue = deepcopy(filedic)
 
+    if datamode == Datamode.train:
+        eventsPerCategoryPerBatch = cfg.trainEventsPerCategoryPerBatch
+    elif datamode == Datamode.valid:
+        eventsPerCategoryPerBatch = cfg.validEventsPerCategoryPerBatch[0]
+
     while True:
         events = []
         labels = []
         for category in cfg.categories:
-            # TODO: IF DATAMODE == DATAMODE.VALID -> OVERSAMPLE USING MAX EVENTCOUNT VALID DATASET BY CFG
             # fill buffer if buffer doesn't have enough events for a batch
-            if len(bufferEvents[category]) < eventsPerClassPerBatch:
+            while len(bufferEvents[category]) < eventsPerCategoryPerBatch:
                 if len(queue[category]) == 0:
                     # refill queue with same dataset if there are no more files to get (oversampling)
                     queue[category] = deepcopy(filedic[category])
@@ -196,18 +196,16 @@ def dataGenerator(cfg: MLConfig, datamode: Datamode):
                 # fill buffers from TTree
                 bufferEvents[category].extend(np.array([np.array(tree[branch], dtype=np.float32) for branch in branchNames]).T.tolist())
                 bufferLabels[category].extend(np.full((eventCount,), category.value, dtype=np.float32).tolist())
-            # get batches
-            events.extend(bufferEvents[category][-eventsPerClassPerBatch:])
-            labels.extend(bufferLabels[category][-eventsPerClassPerBatch:])
-            # delete batches from buffer
-            del bufferEvents[category][-eventsPerClassPerBatch:]
-            del bufferLabels[category][-eventsPerClassPerBatch:]
+            # get batch
+            events.extend(bufferEvents[category][-eventsPerCategoryPerBatch:])
+            labels.extend(bufferLabels[category][-eventsPerCategoryPerBatch:])
+            # delete batch from buffer
+            del bufferEvents[category][-eventsPerCategoryPerBatch:]
+            del bufferLabels[category][-eventsPerCategoryPerBatch:]
 
         events = np.array(events, dtype=np.float32)
         labels = tf.keras.utils.to_categorical(np.array(labels, dtype=np.float32))
         yield events, labels
-
-batchSize = cfg.mlparams.eventsPerClassPerBatch * len(cfg.categories)
 
 # cfg.generateHistograms = False
 # inputs, labels = buildDataset(cfg)
@@ -234,7 +232,7 @@ history = model.fit(
     x = dataGenerator(cfg, Datamode.train),
     validation_data = dataGenerator(cfg, Datamode.valid),
     steps_per_epoch = 1,
-    validation_steps = 1,
+    validation_steps = cfg.validationSteps,
     epochs = 200,
     callbacks = nn_callbacks
 )

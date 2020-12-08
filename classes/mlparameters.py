@@ -6,7 +6,6 @@ class MLParameterset(JsonSerializable):
         self.inputlayer = {}
         self.hiddenlayers = {} 
         self.outputlayer = {}
-        self.eventsPerClassPerBatch = 50
         self.lossfunction = None
         self.optimizer = None
         self.earlystopping = None

@@ -16,5 +16,10 @@ class MLConfig(JsonSerializable, PPrintable):
         self.generateHistograms = True
         self.mlparametersetPath = ""
         self.mlparams = None
+        self.trainEventsPerCategoryPerBatch = 50
+        self.batchSize = 1
+        self.validEventsPerCategoryPerBatch = 2000000
+        self.validationSteps = 1
+        self.stepsPerEpoch = 1
 
 
