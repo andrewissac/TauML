@@ -16,11 +16,12 @@ Params.outputlayer = { 'name': 'predictions', 'type': 'dense', 'nodes': 2, 'acti
 # training parameter
 Params.eventsPerClassPerBatch = 50
 Params.lossfunction = tf.keras.losses.CategoricalCrossentropy(from_logits=True)
-Params.optimizer = tf.keras.optimizers.Adam(lr=0.00001)
-Params.earlystopping = tf.keras.callbacks.EarlyStopping(monitor = 'val_loss', patience = 5, verbose=1, min_delta=0.0005)
-Params.modelcheckpoint = tf.keras.callbacks.ModelCheckpoint(filepath='bestmodel.h5', monitor='val_loss', save_best_only=True, verbose=1)
+Params.optimizer = tf.keras.optimizers.Adam(lr=0.0001)
+Params.earlystopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5, verbose=1, min_delta=0.0005)
+Params.modelcheckpoint = tf.keras.callbacks.ModelCheckpoint(filepath='model', monitor='val_loss', save_best_only=True, verbose=1)
+Params.csvlogger = tf.keras.callbacks.CSVLogger(filename='results', separator=',', append=False)
 
-paramsOutputFileName = 'mlparams0002.json'
+paramsOutputFileName = 'mlparams0001.json'
 paramsOutputPath = '/work/aissac/TauAnalyzer/ML/parametersets'
 paramsFile = Path(path.join(paramsOutputPath, paramsOutputFileName))
 

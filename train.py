@@ -9,6 +9,7 @@ import matplotlib
 import numpy as np
 import pickle
 import glob
+import datetime
 from os import path
 from sklearn.utils import shuffle
 from classes.mlconfig import MLConfig
@@ -152,11 +153,6 @@ print("\n" + bcolors.OKGREEN + bcolors.BOLD + "########## BEGIN PYTHON SCRIPT ##
 # region ######### Get dataset from root files with uproot4 ######### 
 cfg = MLConfig.loadFromJsonfile(args.mlconfigfile)
 
-# getSampleCount(cfg, Datamode.train)
-# getSampleCount(cfg, Datamode.valid)
-# getSampleCount(cfg, Datamode.test)
-#  246 von 1533 files cotain error (are empty)
-
 def dataGenerator(cfg: MLConfig, datamode: Datamode):
     from copy import deepcopy
     filedic = {} # contains list of files per category which will NOT be popped
@@ -205,39 +201,35 @@ def dataGenerator(cfg: MLConfig, datamode: Datamode):
         labels = tf.keras.utils.to_categorical(np.array(labels, dtype=np.float32))
         yield events, labels
 
-# cfg.generateHistograms = False
-# inputs, labels = buildDataset(cfg)
-# from sklearn.model_selection import train_test_split
-
 # region ######### Tensorflow / Keras ######### 
-# region ######### Model ######### 
+datetimeStr = datetime.datetime.now().strftime("_%Y-%m-%d_%H-%M-%S")
 model = cfg.mlparams.buildSequentialKerasModel()
-# endregion ######### Model ######### 
 
 model.summary()
 model.compile(optimizer=cfg.mlparams.optimizer, loss=cfg.mlparams.lossfunction, metrics=['accuracy'])
 
 ES = cfg.mlparams.earlystopping
 MC = cfg.mlparams.modelcheckpoint
+CSV = cfg.mlparams.csvlogger
 # cant directly load earlystopping/modelcheckpoint due to unpickle problems of functions like self.monitor_op(...)
 nn_callbacks = [
     tf.keras.callbacks.EarlyStopping(monitor=ES.monitor, patience=ES.patience, verbose=ES.verbose, min_delta=ES.min_delta),
-    tf.keras.callbacks.ModelCheckpoint(filepath=path.join(cfg.outputPath, MC.filepath), monitor=MC.monitor, save_best_only=MC.save_best_only, verbose=MC.verbose)
+    tf.keras.callbacks.ModelCheckpoint(filepath=path.join(cfg.outputPath, MC.filepath + datetimeStr + '.h5'), monitor=MC.monitor, save_best_only=MC.save_best_only, verbose=MC.verbose),
+    tf.keras.callbacks.CSVLogger(filename=path.join(cfg.outputPath, CSV.filename + datetimeStr + '.csv'), separator=CSV.sep, append=CSV.append)
 ]
 
-steps_per_epoch = int(cfg.datasetsInfoSummary.totalEventCount['train'] / cfg.batchSize)
-print("Steps per epoch: ", steps_per_epoch)
+print("Steps per epoch: ", cfg.stepsPerEpoch)
 
-# region ######### Training ######### 
 history = model.fit(
     x = dataGenerator(cfg, Datamode.train),
     validation_data = dataGenerator(cfg, Datamode.valid),
-    steps_per_epoch= steps_per_epoch,
+    steps_per_epoch= cfg.stepsPerEpoch,
     validation_steps = cfg.validationSteps,
-    epochs = 200,
+    epochs = 1000000, # doesnt matter, since we use early stopping
     callbacks = nn_callbacks
 )
-# endregion ######### Training ######### 
+
+model.save(path.join(cfg.outputPath, MC.filepath + datetimeStr)) # save model as .pb file for loading into C++
 
 # # NN output plot
 # predictions = model.predict(inputs_test)

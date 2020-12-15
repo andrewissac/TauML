@@ -10,6 +10,7 @@ class MLParameterset(JsonSerializable):
         self.optimizer = None
         self.earlystopping = None
         self.modelcheckpoint = None
+        self.csvlogger = None
         self._monitorStrings = ['train_loss', 'val_loss', 'train_mae', 'val_mae', 'train_accuracy', 'val_accuracy']
         self._modeStrings = ['auto', 'min', 'max']
     

@@ -2,5 +2,8 @@
 *.png
 *.json
 *.h5
+*.csv
+*.pb
 sandbox.py
 test.txt
+output*/
